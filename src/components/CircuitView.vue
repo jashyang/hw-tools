@@ -191,6 +191,7 @@ function bands(label) {
         ref="svgRef"
         class="circuit"
         :viewBox="`0 0 ${viewW} ${viewH}`"
+        :width="viewW" :height="viewH"
         @click="ops.clearSelect"
       >
         <!-- 导线 -->
@@ -206,6 +207,7 @@ function bands(label) {
           :key="'gb' + e.id"
           :x="e.x + dx - 8" :y="e.y + dy - 8" :width="e.w + 16" :height="e.h + 16"
           class="group-box" rx="8"
+          @pointerdown.stop
           @click.stop="ops.select(e.id)"
         />
         <text
@@ -216,7 +218,7 @@ function bands(label) {
         >{{ e.mode === 'series' ? '串联组' : '并联组' }} · 点击选中</text>
 
         <!-- 折叠组 -->
-        <g v-for="e in visElems.filter((x) => x.type === 'group' && x.folded)" :key="'gf' + e.id" @click.stop="onGroupFold($event, e.id)">
+        <g v-for="e in visElems.filter((x) => x.type === 'group' && x.folded)" :key="'gf' + e.id" @pointerdown.stop @click.stop="onGroupFold($event, e.id)">
           <rect :x="e.x + dx - 6" :y="e.y + dy - 6" :width="e.w + 12" :height="e.h + 12" class="group-box folded" rx="8" />
           <rect :x="e.x + dx + e.w / 2 - 30" :y="e.y + dy + e.h / 2 - 10" width="60" height="20" class="folded-body" rx="3" />
           <text :x="e.x + dx + e.w / 2" :y="e.y + dy + e.h / 2 + 4" class="folded-val" text-anchor="middle">{{ groupEquiv(e.id) }}</text>
@@ -226,6 +228,7 @@ function bands(label) {
         <g
           v-for="e in visElems.filter((x) => x.type === 'res')" :key="e.id"
           class="res-g" :class="{ sel: ops.selectedId === e.id }"
+          @pointerdown.stop
           @click.stop="ops.select(e.id)"
         >
           <line :x1="e.x + e.w / 2 + dx" :y1="e.y + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + 10 + dy" class="wire" />
@@ -246,6 +249,7 @@ function bands(label) {
           <circle
             :cx="s.x + dx" :cy="s.y + dy" r="5"
             :class="['seam-dot', { clickable: seamMode && s.id !== 'IN' && s.id !== 'GND' }]"
+            @pointerdown.stop
             @click.stop="onSeamClick($event, s.id)"
           />
           <text v-if="s.id === 'IN'" :x="s.x + dx + 10" :y="s.y + dy - 6" class="port-label">Vin ↑</text>
@@ -290,8 +294,7 @@ function bands(label) {
 .canvas-inner { position: absolute; top: 0; left: 0; will-change: transform; }
 .circuit {
   display: block;
-  width: 100%;
-  height: auto;
+  /* 尺寸 = viewBox 1:1，由 canvas-inner 的 transform 统一缩放 */
 }
 .wire { stroke: var(--neon-dim); stroke-width: 2; }
 .group-box {
