@@ -174,6 +174,6 @@ export function useCircuit(root) {
     select, clearSelect, onValueCommit, toggleUnknown, removeSelected,
     addSeries, addParallel, insertInto, pushInto,
     toggleGroupMode, groupAddRes, groupAddGroup, toggleFold,
-    mkRes, mkGroup, findNode, findParent,
+    mkRes, mkGroup, findNode, findParent, removeById,
   }
 }

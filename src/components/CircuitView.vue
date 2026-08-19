@@ -62,7 +62,9 @@ function onPanEnd() {
 
 // ── 拖拽吸附 ──
 const DRAG_TYPE = 'application/x-hwtype'
+const DRAG_ID = 'application/x-hwid'
 const hoverSnap = ref(null)
+const dragSrc = ref(null) // 当前拖动的源电阻 id（移动模式）
 
 // 吸附点列表：series 缝 = 串联插入点；parallel top/bot 缝 = 并联追加点
 const snaps = computed(() => {
@@ -96,9 +98,17 @@ function screenToCircuit(e) {
   return pt.matrixTransform(svg.getScreenCTM().inverse())
 }
 
+function hasDragType(e) {
+  const t = e.dataTransfer.types
+  if (!t) return false
+  for (let i = 0; i < t.length; i++) if (t[i] === DRAG_TYPE) return true
+  return false
+}
+
 function onDragOver(e) {
-  if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+  if (!hasDragType(e)) return
   e.preventDefault()
+  e.dataTransfer.dropEffect = e.dataTransfer.getData(DRAG_TYPE) === 'move' ? 'move' : 'copy'
   const p = screenToCircuit(e)
   const thr = 46 / zoom.value
   let best = null
@@ -116,18 +126,50 @@ function onDragLeave() {
   hoverSnap.value = null
 }
 function onDrop(e) {
-  if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+  if (!hasDragType(e)) return
   e.preventDefault()
   const type = e.dataTransfer.getData(DRAG_TYPE)
+  const srcId = e.dataTransfer.getData(DRAG_ID)
   const s = hoverSnap.value
   hoverSnap.value = null
+  dragSrc.value = null
   if (!s) return
+
+  if (type === 'move' && srcId) {
+    // 移动已有电阻：先判断无变化，再从原位置移除，最后插入目标
+    const src = props.ops.findNode(props.node, srcId)
+    if (!src || src.type !== 'res') return
+    const targetGroup = props.ops.findNode(props.node, s.groupId)
+    if (targetGroup && s.kind === 'parallel' && targetGroup.children.includes(src)) return
+    props.ops.removeById(props.node, srcId)
+    if (s.kind === 'series') {
+      props.ops.insertInto(s.groupId, s.index + 1, src)
+    } else {
+      props.ops.pushInto(s.groupId, src)
+    }
+    props.ops.select(srcId)
+    return
+  }
+
+  // 新建元件
   const node = type === 'res' ? props.ops.mkRes() : props.ops.mkGroup(type)
   if (s.kind === 'series') {
     props.ops.insertInto(s.groupId, s.index + 1, node)
   } else if (s.kind === 'parallel') {
     props.ops.pushInto(s.groupId, node)
   }
+}
+
+// 已有电阻拖动（重组拓扑）
+function onResDragStart(e, id) {
+  e.dataTransfer.setData(DRAG_TYPE, 'move')
+  e.dataTransfer.setData(DRAG_ID, id)
+  e.dataTransfer.effectAllowed = 'move'
+  dragSrc.value = id
+}
+function onResDragEnd() {
+  dragSrc.value = null
+  hoverSnap.value = null
 }
 
 // ── 折叠 / 缝 ──
@@ -227,9 +269,12 @@ function bands(label) {
         <!-- 电阻 -->
         <g
           v-for="e in visElems.filter((x) => x.type === 'res')" :key="e.id"
-          class="res-g" :class="{ sel: ops.selectedId === e.id }"
+          class="res-g" :class="{ sel: ops.selectedId === e.id, dragging: dragSrc === e.id }"
+          draggable="true"
           @pointerdown.stop
           @click.stop="ops.select(e.id)"
+          @dragstart="onResDragStart($event, e.id)"
+          @dragend="onResDragEnd"
         >
           <line :x1="e.x + e.w / 2 + dx" :y1="e.y + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + 10 + dy" class="wire" />
           <line :x1="e.x + e.w / 2 + dx" :y1="e.y + e.h - 10 + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + e.h + dy" class="wire" />
@@ -317,6 +362,7 @@ function bands(label) {
 }
 .res-body.unknown { stroke: var(--amber); }
 .res-body.invalid { stroke: var(--red); }
+.res-g.dragging { opacity: 0.4; }
 .res-g.sel .res-body { filter: drop-shadow(0 0 5px var(--neon-dim)); stroke-width: 2.2; }
 .cap { fill: var(--dim); }
 .res-label-t { fill: var(--cyan); font-size: 11px; font-family: var(--mono); }

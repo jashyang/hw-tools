@@ -66,6 +66,9 @@ export function layout(root) {
       return { w: maxW, h: totalH, cx: x + maxW / 2 }
     }
     // parallel
+    if (node.children.length === 0) {
+      return { w: 0, h: 0, cx: x }
+    }
     let totalW = 0
     let maxH = 0
     const sizes = []
