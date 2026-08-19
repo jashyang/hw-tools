@@ -23,12 +23,6 @@ const root = reactive({
 
 const ops = useCircuit(root)
 
-// 拖动重组导致根结构变化时，原地替换 root 内容（保持引用不变）
-function onRootChanged(newRoot) {
-  Object.keys(root).forEach((k) => delete root[k])
-  Object.assign(root, newRoot)
-}
-
 const result = computed(() => {
   if (!allKnown(root)) return null
   const steps = []
@@ -44,7 +38,7 @@ const result = computed(() => {
     </aside>
 
     <main class="canvas-mid">
-      <CircuitView :node="root" :ops="ops" :seam-mode="false" @root-changed="onRootChanged" />
+      <CircuitView :node="root" :ops="ops" :seam-mode="false" />
     </main>
 
     <aside class="side-right">

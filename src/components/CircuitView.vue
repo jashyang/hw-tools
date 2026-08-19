@@ -11,7 +11,7 @@ const props = defineProps({
   ops: { type: Object, required: true },
   seamMode: { type: Boolean, default: false },
 })
-const emit = defineEmits(['mark-seam', 'root-changed'])
+const emit = defineEmits(['mark-seam'])
 
 const MIN_W = 600
 const MIN_H = 260

@@ -33,12 +33,6 @@ const root = reactive({
 
 const ops = useCircuit(root)
 
-// 拖动重组导致根结构变化时，原地替换 root 内容（保持引用不变）
-function onRootChanged(newRoot) {
-  Object.keys(root).forEach((k) => delete root[k])
-  Object.assign(root, newRoot)
-}
-
 const vin = ref('5')
 const markSeamId = ref(null)
 const markVolt = ref('')
@@ -144,7 +138,7 @@ function solve() {
     </aside>
 
     <main class="canvas-mid">
-      <CircuitView :node="root" :ops="ops" :seam-mode="true" @mark-seam="onMarkSeam" @root-changed="onRootChanged" />
+      <CircuitView :node="root" :ops="ops" :seam-mode="true" @mark-seam="onMarkSeam" />
     </main>
 
     <aside class="side-right">
