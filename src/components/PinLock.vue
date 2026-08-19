@@ -48,7 +48,7 @@ async function verify() {
 
 function onInput() {
   if (lockedUntil.value > Date.now()) return
-  pin.value = pin.value.replace(/[^0-9a-zA-Z]/g, '').slice(0, 6)
+  pin.value = pin.value.replace(/[^0-9a-zA-Z]/g, '').slice(0, 16)
 }
 
 onMounted(async () => {
@@ -92,7 +92,7 @@ const lockLeft = () => Math.max(0, Math.ceil((lockedUntil.value - Date.now()) / 
             class="pin-field"
             :class="{ invalid: errMsg }"
             :disabled="phase === 'unlock' || lockedUntil > Date.now()"
-            maxlength="6"
+            maxlength="16"
             placeholder="••••••"
             autofocus
             @input="onInput"
