@@ -9,7 +9,7 @@ export function useCircuit(root) {
 
   const selected = computed(() => {
     if (!selectedId.value) return null
-    return findNode(root.value, selectedId.value)
+    return findNode(root, selectedId.value)
   })
   const selIsRes = computed(() => selected.value && selected.value.type === 'res')
   const selIsGroup = computed(() => selected.value && selected.value.type === 'group')
@@ -49,7 +49,7 @@ export function useCircuit(root) {
 
   function select(id) {
     selectedId.value = id
-    const n = findNode(root.value, id)
+    const n = findNode(root, id)
     selValue.value = n && n.type === 'res' ? n.raw || '' : ''
   }
   function clearSelect() {
@@ -76,14 +76,14 @@ export function useCircuit(root) {
 
   function removeSelected() {
     if (!selectedId.value) return
-    removeById(root.value, selectedId.value)
+    removeById(root, selectedId.value)
     selectedId.value = null
   }
 
   // 在电阻上"串联一个"
   function addSeries(node) {
     const n = node || selected.value
-    const p = findParent(root.value, n.id)
+    const p = findParent(root, n.id)
     if (!n || n.type !== 'res') return
     const nn = mkRes()
     if (p && p.type === 'group' && p.mode === 'series') {
@@ -101,7 +101,7 @@ export function useCircuit(root) {
   // 在电阻上"并联一个"
   function addParallel(node) {
     const n = node || selected.value
-    const p = findParent(root.value, n.id)
+    const p = findParent(root, n.id)
     if (!n || n.type !== 'res') return
     const nn = mkRes()
     if (p && p.type === 'group' && p.mode === 'parallel') {
@@ -118,14 +118,14 @@ export function useCircuit(root) {
 
   // 插入新元件到组内指定位置（拖拽吸附用）
   function insertInto(groupId, index, node) {
-    const g = findNode(root.value, groupId)
+    const g = findNode(root, groupId)
     if (!g || g.type !== 'group') return
     const idx = Math.min(Math.max(index, 0), g.children.length)
     g.children.splice(idx, 0, node)
     select(node.id)
   }
   function pushInto(groupId, node) {
-    const g = findNode(root.value, groupId)
+    const g = findNode(root, groupId)
     if (!g || g.type !== 'group') return
     g.children.push(node)
     select(node.id)
@@ -162,7 +162,7 @@ export function useCircuit(root) {
       if (!n) return
       if (n.type === 'res') cnt++
       else if (n.type === 'group') n.children.forEach(walk)
-    })(root.value)
+    })(root)
     return { type: 'res', id: `r${Math.random().toString(36).slice(2, 8)}`, label: `R${cnt + 1}`, raw: '', ohms: null, unknown: false }
   }
   function mkGroup(mode) {
