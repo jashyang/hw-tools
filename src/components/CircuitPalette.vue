@@ -14,7 +14,7 @@ function onDragStart(e) {
 function onClick() {
   const node = props.ops.mkRes()
   props.node.children.push(node)
-  props.ops.select(node.id)
+  props.ops.selectOnly(node.id)
 }
 </script>
 

@@ -1,18 +1,18 @@
 import { ref, computed } from 'vue'
 import { parseResistor } from '../core/parse.js'
 
-// 电路编辑操作集：选中、改值、增删、串并联、组操作
+// 电路编辑操作集：多选（点选累积）、组合（串/并联）、改值、增删
 // 由视图层实例化一次，CircuitView 与 RightPanel 共享同一实例
 export function useCircuit(root) {
-  const selectedId = ref(null)
+  const selectedIds = ref([]) // 多选：点选累积
   const selValue = ref('')
 
-  const selected = computed(() => {
-    if (!selectedId.value) return null
-    return findNode(root, selectedId.value)
-  })
-  const selIsRes = computed(() => selected.value && selected.value.type === 'res')
-  const selIsGroup = computed(() => selected.value && selected.value.type === 'group')
+  const selected = computed(() =>
+    selectedIds.value.map((id) => findNode(root, id)).filter(Boolean)
+  )
+  const selCount = computed(() => selectedIds.value.length)
+  const selIsRes = computed(() => selCount.value === 1 && selected.value[0] && selected.value[0].type === 'res')
+  const selIsGroup = computed(() => selCount.value === 1 && selected.value[0] && selected.value[0].type === 'group')
 
   function findNode(n, id) {
     if (!n) return null
@@ -47,17 +47,31 @@ export function useCircuit(root) {
     return false
   }
 
-  function select(id) {
-    selectedId.value = id
-    const n = findNode(root, id)
+  function syncSelValue() {
+    const n = selected.value[0]
     selValue.value = n && n.type === 'res' ? n.raw || '' : ''
   }
+  // 单选（替换选择集）
+  function selectOnly(id) {
+    selectedIds.value = [id]
+    syncSelValue()
+  }
+  // 点选切换（多选累积）
+  function toggleSelect(id) {
+    const i = selectedIds.value.indexOf(id)
+    if (i >= 0) selectedIds.value.splice(i, 1)
+    else selectedIds.value.push(id)
+    syncSelValue()
+  }
   function clearSelect() {
-    selectedId.value = null
+    selectedIds.value = []
+  }
+  function isSelected(id) {
+    return selectedIds.value.includes(id)
   }
 
   function onValueCommit() {
-    const n = selected.value
+    const n = selected.value[0]
     if (!n || n.type !== 'res') return
     const v = parseResistor(selValue.value)
     if (v != null) {
@@ -70,21 +84,20 @@ export function useCircuit(root) {
   }
 
   function toggleUnknown() {
-    const n = selected.value
+    const n = selected.value[0]
     if (n && n.type === 'res') n.unknown = !n.unknown
   }
 
   function removeSelected() {
-    if (!selectedId.value) return
-    removeById(root, selectedId.value)
-    selectedId.value = null
+    for (const n of selected.value) removeById(root, n.id)
+    clearSelect()
   }
 
-  // 在电阻上"串联一个"
-  function addSeries(node) {
-    const n = node || selected.value
-    const p = findParent(root, n.id)
+  // 在单选电阻上"串联一个"
+  function addSeries() {
+    const n = selected.value[0]
     if (!n || n.type !== 'res') return
+    const p = findParent(root, n.id)
     const nn = mkRes()
     if (p && p.type === 'group' && p.mode === 'series') {
       const idx = p.children.findIndex((c) => c.id === n.id)
@@ -96,13 +109,13 @@ export function useCircuit(root) {
         mode: 'series', folded: false, children: [n, nn],
       })
     }
-    select(nn.id)
+    selectOnly(nn.id)
   }
-  // 在电阻上"并联一个"
-  function addParallel(node) {
-    const n = node || selected.value
-    const p = findParent(root, n.id)
+  // 在单选电阻上"并联一个"
+  function addParallel() {
+    const n = selected.value[0]
     if (!n || n.type !== 'res') return
+    const p = findParent(root, n.id)
     const nn = mkRes()
     if (p && p.type === 'group' && p.mode === 'parallel') {
       p.children.push(nn)
@@ -113,7 +126,38 @@ export function useCircuit(root) {
         mode: 'parallel', folded: false, children: [n, nn],
       })
     }
-    select(nn.id)
+    selectOnly(nn.id)
+  }
+
+  // 组合选中的多个元件为串/并联组
+  function combine(mode) {
+    const nodes = selected.value
+    if (nodes.length < 2) return
+    const first = nodes[0]
+    const parent = findParent(root, first.id)
+    if (!parent) return
+    const idx = parent.children.indexOf(first)
+    for (const n of nodes) removeById(root, n.id)
+    const G = {
+      type: 'group',
+      id: `g${Math.random().toString(36).slice(2, 8)}`,
+      mode,
+      folded: false,
+      children: nodes,
+    }
+    parent.children.splice(Math.min(idx, parent.children.length), 0, G)
+    selectOnly(G.id)
+  }
+
+  // 解散选中的组（组内元素提升到父级）
+  function dissolveGroup() {
+    const n = selected.value[0]
+    if (!n || n.type !== 'group') return
+    const parent = findParent(root, n.id)
+    if (!parent) return
+    const idx = parent.children.indexOf(n)
+    parent.children.splice(idx, 1, ...n.children)
+    clearSelect()
   }
 
   // 插入新元件到组内指定位置（拖拽吸附用）
@@ -122,37 +166,37 @@ export function useCircuit(root) {
     if (!g || g.type !== 'group') return
     const idx = Math.min(Math.max(index, 0), g.children.length)
     g.children.splice(idx, 0, node)
-    select(node.id)
+    selectOnly(node.id)
   }
   function pushInto(groupId, node) {
     const g = findNode(root, groupId)
     if (!g || g.type !== 'group') return
     g.children.push(node)
-    select(node.id)
+    selectOnly(node.id)
   }
 
   function toggleGroupMode() {
-    const n = selected.value
+    const n = selected.value[0]
     if (n && n.type === 'group') n.mode = n.mode === 'series' ? 'parallel' : 'series'
   }
   function groupAddRes() {
-    const n = selected.value
+    const n = selected.value[0]
     if (n && n.type === 'group') {
       const nn = mkRes()
       n.children.push(nn)
-      select(nn.id)
+      selectOnly(nn.id)
     }
   }
   function groupAddGroup() {
-    const n = selected.value
+    const n = selected.value[0]
     if (n && n.type === 'group') {
       const nn = { type: 'group', id: `g${Math.random().toString(36).slice(2, 8)}`, mode: 'parallel', folded: false, children: [] }
       n.children.push(nn)
-      select(nn.id)
+      selectOnly(nn.id)
     }
   }
   function toggleFold() {
-    const n = selected.value
+    const n = selected.value[0]
     if (n && n.type === 'group') n.folded = !n.folded
   }
 
@@ -170,9 +214,11 @@ export function useCircuit(root) {
   }
 
   return {
-    selectedId, selected, selValue, selIsRes, selIsGroup,
-    select, clearSelect, onValueCommit, toggleUnknown, removeSelected,
-    addSeries, addParallel, insertInto, pushInto,
+    selectedIds, selected, selCount, selValue, selIsRes, selIsGroup,
+    selectOnly, toggleSelect, clearSelect, isSelected,
+    onValueCommit, toggleUnknown, removeSelected,
+    addSeries, addParallel, combine, dissolveGroup,
+    insertInto, pushInto,
     toggleGroupMode, groupAddRes, groupAddGroup, toggleFold,
     mkRes, mkGroup, findNode, findParent, removeById,
   }

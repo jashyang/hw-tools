@@ -213,7 +213,7 @@ function moveResToSnap(srcId, s) {
     })
     props.node.mode = 'series'
     props.node.children = s.kind === 'outer-top' ? [src, G] : [G, src]
-    props.ops.select(srcId)
+    props.ops.selectOnly(srcId)
     return true
   }
 
@@ -224,7 +224,7 @@ function moveResToSnap(srcId, s) {
   } else {
     props.ops.pushInto(s.groupId, src)
   }
-  props.ops.select(srcId)
+  props.ops.selectOnly(srcId)
   return true
 }
 
@@ -304,9 +304,10 @@ function bands(label) {
           v-for="e in visElems.filter((x) => x.type === 'group' && !x.folded)"
           :key="'gb' + e.id"
           :x="e.x + dx - 8" :y="e.y + dy - 8" :width="e.w + 16" :height="e.h + 16"
-          class="group-box" rx="8"
+          :class="['group-box', { sel: ops.isSelected(e.id) }]"
+          rx="8"
           @pointerdown.stop
-          @click.stop="ops.select(e.id)"
+          @click.stop="ops.toggleSelect(e.id)"
         />
 
         <!-- 折叠组 -->
@@ -319,12 +320,12 @@ function bands(label) {
         <!-- 电阻 -->
         <g
           v-for="e in visElems.filter((x) => x.type === 'res')" :key="e.id"
-          class="res-g" :class="{ sel: ops.selectedId === e.id, dragging: dragSrc === e.id }"
+          class="res-g" :class="{ sel: ops.isSelected(e.id), dragging: dragSrc === e.id }"
           @pointerdown="onResDown($event, e.id)"
           @pointermove="onResMove"
           @pointerup="onResUp"
           @pointercancel="onResCancel"
-          @click.stop="ops.select(e.id)"
+          @click.stop="ops.toggleSelect(e.id)"
         >
           <line :x1="e.x + e.w / 2 + dx" :y1="e.y + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + 10 + dy" class="wire" />
           <line :x1="e.x + e.w / 2 + dx" :y1="e.y + e.h - 10 + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + e.h + dy" class="wire" />
@@ -400,6 +401,7 @@ function bands(label) {
   cursor: pointer;
 }
 .group-box.folded { stroke: var(--amber-dim); }
+.group-box.sel { stroke: var(--amber); stroke-width: 1.5; filter: drop-shadow(0 0 4px var(--amber-dim)); }
 .group-label { fill: var(--dim); font-size: 10px; font-family: var(--mono); }
 .folded-body { fill: var(--panel-2); stroke: var(--amber); stroke-width: 1; }
 .folded-val { fill: var(--amber); font-size: 11px; font-family: var(--mono); }
