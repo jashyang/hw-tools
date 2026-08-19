@@ -286,12 +286,6 @@ function bands(label) {
           @pointerdown.stop
           @click.stop="ops.select(e.id)"
         />
-        <text
-          v-for="e in visElems.filter((x) => x.type === 'group' && !x.folded)"
-          :key="'gl' + e.id"
-          :x="e.x + dx - 2" :y="e.y + dy - 14"
-          class="group-label"
-        >{{ e.mode === 'series' ? '串联组' : '并联组' }} · 点击选中</text>
 
         <!-- 折叠组 -->
         <g v-for="e in visElems.filter((x) => x.type === 'group' && x.folded)" :key="'gf' + e.id" @pointerdown.stop @click.stop="onGroupFold($event, e.id)">
