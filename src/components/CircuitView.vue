@@ -202,7 +202,7 @@ function bands(label) {
         :key="'gb' + e.id"
         :x="e.x + dx - 8" :y="e.y + dy - 8" :width="e.w + 16" :height="e.h + 16"
         class="group-box" rx="8"
-        @click.stop="onGroupFold(e.id)"
+        @click.stop="select(e.id)"
       />
       <text
         v-for="e in visElems.filter((x) => x.type === 'group' && !x.folded)"
