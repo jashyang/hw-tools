@@ -90,12 +90,26 @@ const snaps = computed(() => {
   return out
 })
 
-function screenToCircuit(e) {
+function screenToCircuitXY(clientX, clientY) {
   const svg = svgRef.value
   const pt = svg.createSVGPoint()
-  pt.x = e.clientX
-  pt.y = e.clientY
+  pt.x = clientX
+  pt.y = clientY
   return pt.matrixTransform(svg.getScreenCTM().inverse())
+}
+function findSnapAt(clientX, clientY) {
+  const p = screenToCircuitXY(clientX, clientY)
+  const thr = 46 / zoom.value
+  let best = null
+  let bestD = thr
+  for (const s of snaps.value) {
+    const d = Math.hypot(s.x - p.x, s.y - p.y)
+    if (d < bestD) {
+      bestD = d
+      best = s
+    }
+  }
+  return best
 }
 
 function hasDragType(e) {
@@ -109,18 +123,7 @@ function onDragOver(e) {
   if (!hasDragType(e)) return
   e.preventDefault()
   e.dataTransfer.dropEffect = e.dataTransfer.getData(DRAG_TYPE) === 'move' ? 'move' : 'copy'
-  const p = screenToCircuit(e)
-  const thr = 46 / zoom.value
-  let best = null
-  let bestD = thr
-  for (const s of snaps.value) {
-    const d = Math.hypot(s.x - p.x, s.y - p.y)
-    if (d < bestD) {
-      bestD = d
-      best = s
-    }
-  }
-  hoverSnap.value = best
+  hoverSnap.value = findSnapAt(e.clientX, e.clientY)
 }
 function onDragLeave() {
   hoverSnap.value = null
@@ -136,18 +139,7 @@ function onDrop(e) {
   if (!s) return
 
   if (type === 'move' && srcId) {
-    // 移动已有电阻：先判断无变化，再从原位置移除，最后插入目标
-    const src = props.ops.findNode(props.node, srcId)
-    if (!src || src.type !== 'res') return
-    const targetGroup = props.ops.findNode(props.node, s.groupId)
-    if (targetGroup && s.kind === 'parallel' && targetGroup.children.includes(src)) return
-    props.ops.removeById(props.node, srcId)
-    if (s.kind === 'series') {
-      props.ops.insertInto(s.groupId, s.index + 1, src)
-    } else {
-      props.ops.pushInto(s.groupId, src)
-    }
-    props.ops.select(srcId)
+    moveResToSnap(srcId, s)
     return
   }
 
@@ -160,16 +152,58 @@ function onDrop(e) {
   }
 }
 
-// 已有电阻拖动（重组拓扑）
-function onResDragStart(e, id) {
-  e.dataTransfer.setData(DRAG_TYPE, 'move')
-  e.dataTransfer.setData(DRAG_ID, id)
-  e.dataTransfer.effectAllowed = 'move'
-  dragSrc.value = id
+// 已有电阻拖动（Pointer Events 实现，绕开 SVG 元素不支持 HTML5 draggable 的问题）
+const dragCandidate = ref(null) // { id, sx, sy, active }
+const DRAG_THRESHOLD = 6
+
+function onResDown(e, id) {
+  dragCandidate.value = { id, sx: e.clientX, sy: e.clientY, active: false }
+  try {
+    e.target.setPointerCapture(e.pointerId)
+  } catch { /* ignore */ }
+  e.stopPropagation()
 }
-function onResDragEnd() {
-  dragSrc.value = null
+function onResMove(e) {
+  const d = dragCandidate.value
+  if (!d) return
+  if (!d.active) {
+    if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < DRAG_THRESHOLD) return
+    d.active = true
+    dragSrc.value = d.id
+  }
+  hoverSnap.value = findSnapAt(e.clientX, e.clientY)
+}
+function onResUp(e) {
+  const d = dragCandidate.value
+  dragCandidate.value = null
+  if (!d) return
+  if (d.active) {
+    const s = hoverSnap.value
+    hoverSnap.value = null
+    dragSrc.value = null
+    if (s) moveResToSnap(d.id, s)
+  }
+}
+function onResCancel() {
+  dragCandidate.value = null
   hoverSnap.value = null
+  dragSrc.value = null
+}
+
+// 执行移动：从原位置移除 → 插入目标吸附点
+function moveResToSnap(srcId, s) {
+  const src = props.ops.findNode(props.node, srcId)
+  if (!src || src.type !== 'res') return false
+  const targetGroup = props.ops.findNode(props.node, s.groupId)
+  if (targetGroup && s.kind === 'parallel' && targetGroup.children.includes(src)) return false
+  props.ops.removeById(props.node, srcId)
+  if (s.kind === 'series') {
+    props.ops.insertInto(s.groupId, s.index + 1, src)
+  } else {
+    props.ops.pushInto(s.groupId, src)
+  }
+  props.ops.select(srcId)
+  return true
 }
 
 // ── 折叠 / 缝 ──
@@ -270,11 +304,11 @@ function bands(label) {
         <g
           v-for="e in visElems.filter((x) => x.type === 'res')" :key="e.id"
           class="res-g" :class="{ sel: ops.selectedId === e.id, dragging: dragSrc === e.id }"
-          draggable="true"
-          @pointerdown.stop
+          @pointerdown="onResDown($event, e.id)"
+          @pointermove="onResMove"
+          @pointerup="onResUp"
+          @pointercancel="onResCancel"
           @click.stop="ops.select(e.id)"
-          @dragstart="onResDragStart($event, e.id)"
-          @dragend="onResDragEnd"
         >
           <line :x1="e.x + e.w / 2 + dx" :y1="e.y + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + 10 + dy" class="wire" />
           <line :x1="e.x + e.w / 2 + dx" :y1="e.y + e.h - 10 + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + e.h + dy" class="wire" />

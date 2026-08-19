@@ -1,24 +1,18 @@
 <script setup>
-// 元件库：电阻 / 串联组 / 并联组 —— 点击添加到根组，长按拖出到画布吸附
+// 元件库：只保留电阻 —— 点击加入根组；拖出到画布导线/母线吸附连接
 const props = defineProps({
   node: { type: Object, required: true },
   ops: { type: Object, required: true },
 })
 
 const DRAG_TYPE = 'application/x-hwtype'
-const items = [
-  { type: 'res', name: '电阻', icon: '▯' },
-  { type: 'series', name: '串联组', icon: '⊕' },
-  { type: 'parallel', name: '并联组', icon: '∥' },
-]
 
-function onDragStart(e, type) {
-  e.dataTransfer.setData(DRAG_TYPE, type)
+function onDragStart(e) {
+  e.dataTransfer.setData(DRAG_TYPE, 'res')
   e.dataTransfer.effectAllowed = 'copy'
 }
-// 点击 = 直接加入根组（作为新元素/新支路）
-function onClick(type) {
-  const node = type === 'res' ? props.ops.mkRes() : props.ops.mkGroup(type)
+function onClick() {
+  const node = props.ops.mkRes()
   props.node.children.push(node)
   props.ops.select(node.id)
 }
@@ -28,16 +22,19 @@ function onClick(type) {
   <div class="palette">
     <div class="palette-title">元件库</div>
     <div
-      v-for="it in items" :key="it.type"
       class="pal-item" draggable="true"
-      @dragstart="onDragStart($event, it.type)"
-      @click="onClick(it.type)"
-      :title="`点击加入电路 / 拖到画布导线或母线上连接`"
+      @dragstart="onDragStart"
+      @click="onClick"
+      title="点击加入电路 / 拖到画布导线或母线上连接"
     >
-      <span class="pal-icon">{{ it.icon }}</span>
-      <span class="pal-name">{{ it.name }}</span>
+      <span class="pal-icon">▯</span>
+      <span class="pal-name">电阻</span>
     </div>
-    <div class="palette-hint">拖到画布：导线中间=串联插入，母线=并联新支路</div>
+    <div class="palette-hint">
+      点击：加入电路<br />
+      拖到画布：导线中间=串联插入，母线=并联新支路<br />
+      电路里的电阻也可直接拖动重组
+    </div>
   </div>
 </template>
 
