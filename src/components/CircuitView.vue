@@ -366,6 +366,14 @@ function bands(label) {
       <button class="btn sm" @click="zoom = Math.max(0.3, zoom / 1.25)">－</button>
       <button class="btn sm cyan" @click="zoom = 1; pan = { x: 0, y: 0 }">复位</button>
     </div>
+
+    <!-- 多选组合浮动条（选中 ≥2 时显示） -->
+    <div v-if="ops.selCount >= 2" class="combine-bar">
+      <span class="cb-text">已选 {{ ops.selCount }} 个</span>
+      <button class="btn cb-btn" @click="ops.combine('parallel')">∥ 并联组合</button>
+      <button class="btn cb-btn cyan" @click="ops.combine('series')">⊕ 串联组合</button>
+      <button class="btn sm" @click="ops.clearSelect()">取消</button>
+    </div>
   </div>
 </template>
 
@@ -459,4 +467,27 @@ function bands(label) {
   min-width: 40px;
   text-align: center;
 }
+.combine-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(10, 14, 20, 0.94);
+  border: 1px solid var(--amber-dim);
+  border-radius: 10px;
+  z-index: 10;
+  box-shadow: 0 0 24px rgba(255, 176, 32, 0.18);
+  white-space: nowrap;
+}
+.cb-text {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--amber);
+  letter-spacing: 1px;
+}
+.cb-btn { padding: 7px 14px; font-size: 13px; }
 </style>
