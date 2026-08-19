@@ -9,18 +9,18 @@ const props = defineProps({
 
 const valDraft = ref('')
 watch(
-  () => props.ops.selectedIds.value.join(','),
+  () => props.ops.selectedIds.join(','),
   () => {
-    const n = props.ops.selected.value[0]
+    const n = props.ops.selected[0]
     valDraft.value = n && n.type === 'res' ? n.raw || '' : ''
   }
 )
 function commit() {
-  props.ops.selValue.value = valDraft.value
+  props.ops.selValue = valDraft.value
   props.ops.onValueCommit()
 }
 function selNames() {
-  return props.ops.selected.value.map((n) => (n.type === 'res' ? n.label : n.mode === 'series' ? '串组' : '并组')).join('、')
+  return props.ops.selected.map((n) => (n.type === 'res' ? n.label : n.mode === 'series' ? '串组' : '并组')).join('、')
 }
 </script>
 

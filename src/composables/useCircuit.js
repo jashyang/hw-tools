@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { parseResistor } from '../core/parse.js'
 
 // 电路编辑操作集：多选（点选累积）、组合（串/并联）、改值、增删
@@ -213,7 +213,8 @@ export function useCircuit(root) {
     return { type: 'group', id: `g${Math.random().toString(36).slice(2, 8)}`, mode, folded: false, children: [] }
   }
 
-  return {
+  // reactive 包装：模板中访问时 ref 自动解包（否则 ops.selCount 拿到 ref 对象）
+  return reactive({
     selectedIds, selected, selCount, selValue, selIsRes, selIsGroup,
     selectOnly, toggleSelect, clearSelect, isSelected,
     onValueCommit, toggleUnknown, removeSelected,
@@ -221,5 +222,5 @@ export function useCircuit(root) {
     insertInto, pushInto,
     toggleGroupMode, groupAddRes, groupAddGroup, toggleFold,
     mkRes, mkGroup, findNode, findParent, removeById,
-  }
+  })
 }
