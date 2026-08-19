@@ -11,7 +11,7 @@ const props = defineProps({
   ops: { type: Object, required: true },
   seamMode: { type: Boolean, default: false },
 })
-const emit = defineEmits(['mark-seam'])
+const emit = defineEmits(['mark-seam', 'root-changed'])
 
 const MIN_W = 600
 const MIN_H = 260
@@ -66,7 +66,7 @@ const DRAG_ID = 'application/x-hwid'
 const hoverSnap = ref(null)
 const dragSrc = ref(null) // 当前拖动的源电阻 id（移动模式）
 
-// 吸附点列表：series 缝 = 串联插入点；parallel top/bot 缝 = 并联追加点
+// 吸附点列表：series 缝 = 串联插入点；parallel top/bot 缝 = 并联追加点；组外侧 = 与整组串联
 const snaps = computed(() => {
   const out = []
   for (const s of L.value.seams) {
@@ -84,6 +84,9 @@ const snaps = computed(() => {
       const g = props.ops.findNode(props.node, m2[1])
       if (g && g.mode === 'parallel') {
         out.push({ kind: 'parallel', groupId: m2[1], x: s.x + dx.value, y: s.y + dy.value })
+        // 组外侧：与整个组串联（上方/下方 24px 处）
+        out.push({ kind: 'outer-top', groupId: m2[1], x: s.x + dx.value, y: s.y + dy.value - 24 })
+        out.push({ kind: 'outer-bot', groupId: m2[1], x: s.x + dx.value, y: s.y + dy.value + 24 })
       }
     }
   }
@@ -190,11 +193,29 @@ function onResCancel() {
   dragSrc.value = null
 }
 
-// 执行移动：从原位置移除 → 插入目标吸附点
+// 执行移动：从原位置移除 → 插入目标吸附点（series/parallel），或与整组串联（outer）
 function moveResToSnap(srcId, s) {
   const src = props.ops.findNode(props.node, srcId)
   if (!src || src.type !== 'res') return false
   const targetGroup = props.ops.findNode(props.node, s.groupId)
+
+  if (s.kind === 'outer-top' || s.kind === 'outer-bot') {
+    // 与整个组串联：移除 src → 新根 series [src, G] 或 [G, src]
+    props.ops.removeById(props.node, srcId)
+    const G = props.ops.findNode(props.node, s.groupId)
+    if (!G) return false
+    const newRoot = {
+      type: 'group',
+      id: 'root',
+      mode: 'series',
+      folded: false,
+      children: s.kind === 'outer-top' ? [src, G] : [G, src],
+    }
+    emit('root-changed', newRoot)
+    props.ops.select(srcId)
+    return true
+  }
+
   if (targetGroup && s.kind === 'parallel' && targetGroup.children.includes(src)) return false
   props.ops.removeById(props.node, srcId)
   if (s.kind === 'series') {
@@ -312,7 +333,7 @@ function bands(label) {
           />
           <rect :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 10 + dy" width="18" height="5" class="cap" />
           <rect :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 39 + dy" width="18" height="5" class="cap" />
-          <rect v-for="(b, bi) in bands(e.label)" :key="bi" :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 17 + bi * 7 + dy" width="18" height="4" :fill="b" opacity="0.9" />
+          <rect v-for="(b, bi) in bands(e.label)" :key="bi" :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 17 + bi * 7 + dy" width="18" height="4" :fill="b" opacity="0.9" style="pointer-events:none" />
           <text :x="e.x + e.w + dx - 2" :y="e.y + 20 + dy" class="res-label-t">{{ e.label }}</text>
           <text :x="e.x + e.w + dx - 2" :y="e.y + 34 + dy" class="res-val-t" :class="{ 'unk-t': e.unknown }">{{ e.unknown ? '?' : formatOhms(e.ohms) }}</text>
         </g>
