@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { layout } from '../core/layout.js'
 import { equivR } from '../core/simplify.js'
 import { formatOhms } from '../core/parse.js'
@@ -200,18 +200,19 @@ function moveResToSnap(srcId, s) {
   const targetGroup = props.ops.findNode(props.node, s.groupId)
 
   if (s.kind === 'outer-top' || s.kind === 'outer-bot') {
-    // 与整个组串联：移除 src → 新根 series [src, G] 或 [G, src]
+    // 与整个根组串联：把源电阻移出，根改为 series [src, G] 或 [G, src]
+    if (s.groupId !== props.node.id) return false // 目前仅支持根组外侧（嵌套组后续扩展）
     props.ops.removeById(props.node, srcId)
-    const G = props.ops.findNode(props.node, s.groupId)
-    if (!G) return false
-    const newRoot = {
+    const rest = props.node.children // 剩余元素（响应式数组引用）
+    const G = reactive({
       type: 'group',
-      id: 'root',
-      mode: 'series',
+      id: `g${Math.random().toString(36).slice(2, 8)}`,
+      mode: props.node.mode,
       folded: false,
-      children: s.kind === 'outer-top' ? [src, G] : [G, src],
-    }
-    emit('root-changed', newRoot)
+      children: rest,
+    })
+    props.node.mode = 'series'
+    props.node.children = s.kind === 'outer-top' ? [src, G] : [G, src]
     props.ops.select(srcId)
     return true
   }
