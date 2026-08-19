@@ -1,0 +1,5 @@
+services:
+  web:
+    image: 127.0.0.1:5000/hw-tools/web:latest
+    restart: unless-stopped
+    # 不暴露端口，由共享 nginx 网关容器反代（hw.aiplex.ltd）
