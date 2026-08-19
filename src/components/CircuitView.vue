@@ -12,13 +12,18 @@ const props = defineProps({
 })
 const emit = defineEmits(['mark-seam'])
 
-const PAD = 40 // SVG 四周留白
+const MIN_W = 600 // viewBox 最小宽（内容小时防止图标过大）
+const MIN_H = 260 // viewBox 最小高
 
 const L = computed(() => layout(props.node))
-const viewW = computed(() => L.value.elems.find((e) => e.id === props.node.id).w + PAD * 2)
-const viewH = computed(() => L.value.elems.find((e) => e.id === props.node.id).h + PAD * 2)
-const dx = computed(() => PAD)
-const dy = computed(() => PAD)
+const rootElem = computed(() => L.value.elems.find((e) => e.id === props.node.id))
+const contentW = computed(() => rootElem.value.w)
+const contentH = computed(() => rootElem.value.h)
+const viewW = computed(() => Math.max(contentW.value, MIN_W))
+const viewH = computed(() => Math.max(contentH.value, MIN_H))
+// 内容在 viewBox 内居中（内容小于 viewBox 时）
+const dx = computed(() => (viewW.value - contentW.value) / 2)
+const dy = computed(() => (viewH.value - contentH.value) / 2)
 
 const selectedId = ref(null)
 const selValue = ref('')
@@ -309,7 +314,7 @@ function bands(label) {
 .circuit-wrap { position: relative; }
 .circuit {
   width: 100%;
-  height: auto;
+  height: 300px; /* 固定视口高度，内容自适应缩放 */
   background: var(--bg-deep);
   border: 1px solid var(--border);
   border-radius: 10px;
