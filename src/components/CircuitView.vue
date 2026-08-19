@@ -1,19 +1,20 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { layout, resBodyRect } from '../core/layout.js'
+import { layout } from '../core/layout.js'
 import { equivR } from '../core/simplify.js'
-import { parseResistor, formatOhms } from '../core/parse.js'
+import { formatOhms } from '../core/parse.js'
 
-// 电路图组件：SVG 渲染树形网络（垂直走向，Vin 上 → GND 下）
-// 交互：点选元件 → 底部操作面板；点缝点（seamMode）→ emit mark-seam
+// 电路图画布：SVG 渲染（垂直走向）+ 滚轮缩放 + 空白拖动平移 + 元件拖拽吸附
+// 交互状态（选中/操作）由外部 useCircuit 实例提供
 const props = defineProps({
   node: { type: Object, required: true },
+  ops: { type: Object, required: true },
   seamMode: { type: Boolean, default: false },
 })
 const emit = defineEmits(['mark-seam'])
 
-const MIN_W = 600 // viewBox 最小宽（内容小时防止图标过大）
-const MIN_H = 260 // viewBox 最小高
+const MIN_W = 600
+const MIN_H = 260
 
 const L = computed(() => layout(props.node))
 const rootElem = computed(() => L.value.elems.find((e) => e.id === props.node.id))
@@ -21,164 +22,127 @@ const contentW = computed(() => rootElem.value.w)
 const contentH = computed(() => rootElem.value.h)
 const viewW = computed(() => Math.max(contentW.value, MIN_W))
 const viewH = computed(() => Math.max(contentH.value, MIN_H))
-// 内容在 viewBox 内居中（内容小于 viewBox 时）
 const dx = computed(() => (viewW.value - contentW.value) / 2)
 const dy = computed(() => (viewH.value - contentH.value) / 2)
 
-const selectedId = ref(null)
-const selValue = ref('')
+// ── 缩放 / 平移 ──
+const zoom = ref(1)
+const pan = ref({ x: 0, y: 0 })
+const canvasRef = ref(null)
+const svgRef = ref(null)
+const panning = ref(false)
+const panStart = ref({ x: 0, y: 0 })
+const panOrigin = ref({ x: 0, y: 0 })
 
-const selected = computed(() => {
-  if (!selectedId.value) return null
-  return findNode(props.node, selectedId.value)
+function onWheel(e) {
+  e.preventDefault()
+  const rect = canvasRef.value.getBoundingClientRect()
+  const mx = e.clientX - rect.left
+  const my = e.clientY - rect.top
+  const factor = e.deltaY < 0 ? 1.12 : 0.89
+  const nz = Math.min(3, Math.max(0.3, zoom.value * factor))
+  pan.value.x = mx - ((mx - pan.value.x) * nz) / zoom.value
+  pan.value.y = my - ((my - pan.value.y) * nz) / zoom.value
+  zoom.value = nz
+}
+function onPanStart(e) {
+  // 只响应空白区域拖动（按钮/元件不触发：元件点击有 stopPropagation）
+  panning.value = true
+  panStart.value = { x: e.clientX, y: e.clientY }
+  panOrigin.value = { ...pan.value }
+}
+function onPanMove(e) {
+  if (!panning.value) return
+  pan.value.x = panOrigin.value.x + (e.clientX - panStart.value.x)
+  pan.value.y = panOrigin.value.y + (e.clientY - panStart.value.y)
+}
+function onPanEnd() {
+  panning.value = false
+}
+
+// ── 拖拽吸附 ──
+const DRAG_TYPE = 'application/x-hwtype'
+const hoverSnap = ref(null)
+
+// 吸附点列表：series 缝 = 串联插入点；parallel top/bot 缝 = 并联追加点
+const snaps = computed(() => {
+  const out = []
+  for (const s of L.value.seams) {
+    if (s.id === 'IN' || s.id === 'GND') continue
+    const m = s.id.match(/^(.+):s(\d+)$/)
+    if (m) {
+      const g = props.ops.findNode(props.node, m[1])
+      if (g && g.mode === 'series') {
+        out.push({ kind: 'series', groupId: m[1], index: Number(m[2]), x: s.x + dx.value, y: s.y + dy.value })
+      }
+      continue
+    }
+    const m2 = s.id.match(/^(.+):(top|bot)$/)
+    if (m2) {
+      const g = props.ops.findNode(props.node, m2[1])
+      if (g && g.mode === 'parallel') {
+        out.push({ kind: 'parallel', groupId: m2[1], x: s.x + dx.value, y: s.y + dy.value })
+      }
+    }
+  }
+  return out
 })
 
-function findNode(n, id) {
-  if (n.id === id) return n
-  if (n.type === 'group') {
-    for (const c of n.children) {
-      const r = findNode(c, id)
-      if (r) return r
-    }
-  }
-  return null
-}
-function findParent(n, id, parent = null) {
-  if (n.id === id) return parent
-  if (n.type === 'group') {
-    for (const c of n.children) {
-      const r = findParent(c, id, n)
-      if (r) return r
-    }
-  }
-  return null
-}
-function removeById(n, id) {
-  if (n.type === 'group') {
-    const idx = n.children.findIndex((c) => c.id === id)
-    if (idx >= 0) {
-      n.children.splice(idx, 1)
-      return true
-    }
-    for (const c of n.children) if (removeById(c, id)) return true
-  }
-  return false
+function screenToCircuit(e) {
+  const svg = svgRef.value
+  const pt = svg.createSVGPoint()
+  pt.x = e.clientX
+  pt.y = e.clientY
+  return pt.matrixTransform(svg.getScreenCTM().inverse())
 }
 
-function select(id) {
-  selectedId.value = id
-  const n = findNode(props.node, id)
-  selValue.value = n && n.type === 'res' ? (n.raw || '') : ''
+function onDragOver(e) {
+  if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+  e.preventDefault()
+  const p = screenToCircuit(e)
+  const thr = 46 / zoom.value
+  let best = null
+  let bestD = thr
+  for (const s of snaps.value) {
+    const d = Math.hypot(s.x - p.x, s.y - p.y)
+    if (d < bestD) {
+      bestD = d
+      best = s
+    }
+  }
+  hoverSnap.value = best
+}
+function onDragLeave() {
+  hoverSnap.value = null
+}
+function onDrop(e) {
+  if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
+  e.preventDefault()
+  const type = e.dataTransfer.getData(DRAG_TYPE)
+  const s = hoverSnap.value
+  hoverSnap.value = null
+  if (!s) return
+  const node = type === 'res' ? props.ops.mkRes() : props.ops.mkGroup(type)
+  if (s.kind === 'series') {
+    props.ops.insertInto(s.groupId, s.index + 1, node)
+  } else if (s.kind === 'parallel') {
+    props.ops.pushInto(s.groupId, node)
+  }
 }
 
-function onResClick(e, id) {
+// ── 折叠 / 缝 ──
+function onGroupFold(e, id) {
   e.stopPropagation()
-  select(id)
+  const n = props.ops.findNode(props.node, id)
+  if (n) n.folded = !n.folded
 }
-
 function onSeamClick(e, id) {
   e.stopPropagation()
   if (!props.seamMode) return
   emit('mark-seam', id)
 }
 
-function onGroupFold(e, id) {
-  e.stopPropagation()
-  const n = findNode(props.node, id)
-  if (n) n.folded = !n.folded
-}
-
-function onValueCommit() {
-  const n = selected.value
-  if (!n || n.type !== 'res') return
-  const v = parseResistor(selValue.value)
-  if (v != null) {
-    n.ohms = v
-    n.raw = selValue.value
-    n.invalid = false
-  } else {
-    n.invalid = true
-  }
-}
-
-function toggleUnknown() {
-  const n = selected.value
-  if (n && n.type === 'res') n.unknown = !n.unknown
-}
-
-function removeSelected() {
-  if (!selectedId.value) return
-  removeById(props.node, selectedId.value)
-  selectedId.value = null
-}
-
-// 在该电阻上"串联一个"：父串联组→插入其后；其他→把该电阻包装成串联组
-function addSeries() {
-  const n = selected.value
-  const p = findParent(props.node, selectedId.value)
-  if (!n || n.type !== 'res') return
-  const nn = mkRes()
-  if (p && p.type === 'group' && p.mode === 'series') {
-    const idx = p.children.findIndex((c) => c.id === n.id)
-    p.children.splice(idx + 1, 0, nn)
-  } else if (p && p.type === 'group') {
-    const idx = p.children.findIndex((c) => c.id === n.id)
-    p.children.splice(idx, 1, {
-      type: 'group', id: `g${Math.random().toString(36).slice(2, 8)}`,
-      mode: 'series', folded: false, children: [n, nn],
-    })
-  }
-  selectedId.value = nn.id
-  selValue.value = ''
-}
-// 在该电阻上"并联一个"：父并联组→追加支路；其他→把该电阻包装成并联组
-function addParallel() {
-  const n = selected.value
-  const p = findParent(props.node, selectedId.value)
-  if (!n || n.type !== 'res') return
-  const nn = mkRes()
-  if (p && p.type === 'group' && p.mode === 'parallel') {
-    p.children.push(nn)
-  } else if (p && p.type === 'group') {
-    const idx = p.children.findIndex((c) => c.id === n.id)
-    p.children.splice(idx, 1, {
-      type: 'group', id: `g${Math.random().toString(36).slice(2, 8)}`,
-      mode: 'parallel', folded: false, children: [n, nn],
-    })
-  }
-  selectedId.value = nn.id
-  selValue.value = ''
-}
-function mkRes() {
-  // label 自动编号：统计现有电阻数
-  let cnt = 0
-  ;(function walk(n) {
-    if (n.type === 'res') cnt++
-    else if (n.type === 'group') n.children.forEach(walk)
-  })(props.node)
-  return { type: 'res', id: `r${Math.random().toString(36).slice(2, 8)}`, label: `R${cnt + 1}`, raw: '', ohms: null, unknown: false }
-}
-
-// 组操作
-function toggleGroupMode() {
-  const n = selected.value
-  if (n && n.type === 'group') n.mode = n.mode === 'series' ? 'parallel' : 'series'
-}
-function groupAddRes() {
-  const n = selected.value
-  if (n && n.type === 'group') n.children.push(mkRes())
-}
-function groupAddGroup() {
-  const n = selected.value
-  if (n && n.type === 'group') {
-    n.children.push({ type: 'group', id: `g${Math.random().toString(36).slice(2, 8)}`, mode: 'parallel', folded: false, children: [] })
-  }
-}
-
-const selIsRes = computed(() => selected.value && selected.value.type === 'res')
-const selIsGroup = computed(() => selected.value && selected.value.type === 'group')
-
-// 折叠组隐藏的后代 id 集合（折叠时组内元素不渲染）
+// 折叠组隐藏后代
 const hiddenIds = computed(() => {
   const s = new Set()
   ;(function walk(n) {
@@ -195,10 +159,9 @@ const hiddenIds = computed(() => {
 })
 const visElems = computed(() => L.value.elems.filter((e) => !hiddenIds.value.has(e.id)))
 function groupEquiv(id) {
-  return formatOhms(equivR(findNode(props.node, id)))
+  return formatOhms(equivR(props.ops.findNode(props.node, id)))
 }
 
-// 电阻端帽配色（按 label 哈希取 3 色）
 const BANDS = ['#b3402a', '#e8a33d', '#3d7ea6', '#6a4d9e', '#4a9e5a', '#c94f6d', '#8c8c8c']
 function bands(label) {
   let h = 0
@@ -208,120 +171,127 @@ function bands(label) {
 </script>
 
 <template>
-  <div class="circuit-wrap">
-    <svg
-      class="circuit" :viewBox="`0 0 ${viewW} ${viewH}`"
-      @click="selectedId = null"
+  <div
+    ref="canvasRef" class="canvas"
+    :class="{ panning }"
+    @wheel="onWheel"
+    @pointerdown="onPanStart"
+    @pointermove="onPanMove"
+    @pointerup="onPanEnd"
+    @pointerleave="onPanEnd"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
+  >
+    <div
+      class="canvas-inner"
+      :style="{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0' }"
     >
-      <!-- 导线 -->
-      <line
-        v-for="(w, i) in L.wires" :key="'w' + i"
-        :x1="w.x1 + dx" :y1="w.y1 + dy" :x2="w.x2 + dx" :y2="w.y2 + dy"
-        class="wire"
-      />
+      <svg
+        ref="svgRef"
+        class="circuit"
+        :viewBox="`0 0 ${viewW} ${viewH}`"
+        @click="ops.clearSelect"
+      >
+        <!-- 导线 -->
+        <line
+          v-for="(w, i) in L.wires" :key="'w' + i"
+          :x1="w.x1 + dx" :y1="w.y1 + dy" :x2="w.x2 + dx" :y2="w.y2 + dy"
+          class="wire"
+        />
 
-      <!-- 组边框（展开） -->
-      <rect
-        v-for="e in visElems.filter((x) => x.type === 'group' && !x.folded)"
-        :key="'gb' + e.id"
-        :x="e.x + dx - 8" :y="e.y + dy - 8" :width="e.w + 16" :height="e.h + 16"
-        class="group-box" rx="8"
-        @click.stop="select(e.id)"
-      />
-      <text
-        v-for="e in visElems.filter((x) => x.type === 'group' && !x.folded)"
-        :key="'gl' + e.id"
-        :x="e.x + dx - 2" :y="e.y + dy - 14"
-        class="group-label"
-      >{{ e.mode === 'series' ? '串联组' : '并联组' }} · 点击折叠</text>
-
-      <!-- 折叠组：等效电阻框 -->
-      <g v-for="e in visElems.filter((x) => x.type === 'group' && x.folded)" :key="'gf' + e.id" @click.stop="onGroupFold(e.id)">
-        <rect :x="e.x + dx - 6" :y="e.y + dy - 6" :width="e.w + 12" :height="e.h + 12" class="group-box folded" rx="8" />
-        <rect :x="e.x + dx + e.w / 2 - 30" :y="e.y + dy + e.h / 2 - 10" width="60" height="20" class="folded-body" rx="3" />
-        <text :x="e.x + dx + e.w / 2" :y="e.y + dy + e.h / 2 + 4" class="folded-val" text-anchor="middle">{{ groupEquiv(e.id) }}</text>
-      </g>
-
-      <!-- 电阻 -->
-      <g v-for="e in visElems.filter((x) => x.type === 'res')" :key="e.id" class="res-g" :class="{ sel: selectedId === e.id }" @click.stop="onResClick($event, e.id)">
-        <!-- 端口短线 -->
-        <line :x1="e.x + e.w / 2 + dx" :y1="e.y + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + 10 + dy" class="wire" />
-        <line :x1="e.x + e.w / 2 + dx" :y1="e.y + e.h - 10 + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + e.h + dy" class="wire" />
-        <!-- 电阻体：竖直长方形 -->
+        <!-- 组边框（展开） -->
         <rect
-          :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 10 + dy" width="18" height="34" rx="2"
-          :class="['res-body', { unknown: e.unknown, invalid: e.invalid }]"
-        />
-        <!-- 端帽 -->
-        <rect :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 10 + dy" width="18" height="5" class="cap" />
-        <rect :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 39 + dy" width="18" height="5" class="cap" />
-        <!-- 色环 -->
-        <rect v-for="(b, bi) in bands(e.label)" :key="bi" :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 17 + bi * 7 + dy" width="18" height="4" :fill="b" opacity="0.9" />
-        <!-- 标注 -->
-        <text :x="e.x + e.w + dx - 2" :y="e.y + 20 + dy" class="res-label-t">{{ e.label }}</text>
-        <text :x="e.x + e.w + dx - 2" :y="e.y + 34 + dy" class="res-val-t" :class="{ 'unk-t': e.unknown }">{{ e.unknown ? '?' : formatOhms(e.ohms) }}</text>
-      </g>
-
-      <!-- 缝点 -->
-      <g v-for="s in L.seams" :key="s.id">
-        <circle
-          :cx="s.x + dx" :cy="s.y + dy" r="5"
-          :class="['seam-dot', { clickable: seamMode && s.id !== 'IN' && s.id !== 'GND' }]"
-          @click.stop="onSeamClick($event, s.id)"
+          v-for="e in visElems.filter((x) => x.type === 'group' && !x.folded)"
+          :key="'gb' + e.id"
+          :x="e.x + dx - 8" :y="e.y + dy - 8" :width="e.w + 16" :height="e.h + 16"
+          class="group-box" rx="8"
+          @click.stop="ops.select(e.id)"
         />
         <text
-          v-if="s.id === 'IN'" :x="s.x + dx + 10" :y="s.y + dy - 6" class="port-label"
-        >Vin ↑</text>
-        <text
-          v-else-if="s.id === 'GND'" :x="s.x + dx + 10" :y="s.y + dy + 14" class="port-label"
-        >GND</text>
-      </g>
-    </svg>
+          v-for="e in visElems.filter((x) => x.type === 'group' && !x.folded)"
+          :key="'gl' + e.id"
+          :x="e.x + dx - 2" :y="e.y + dy - 14"
+          class="group-label"
+        >{{ e.mode === 'series' ? '串联组' : '并联组' }} · 点击选中</text>
 
-    <!-- 操作面板 -->
-    <transition name="fade">
-      <div v-if="selected" class="op-panel">
-        <!-- 电阻操作 -->
-        <template v-if="selIsRes">
-          <input
-            v-model="selValue" type="text" class="op-input"
-            :class="{ invalid: selected.invalid }"
-            :placeholder="selected.unknown ? '取消未知后输入阻值' : '阻值，如 1k / 2.2k'"
-            :disabled="selected.unknown"
-            @change="onValueCommit"
+        <!-- 折叠组 -->
+        <g v-for="e in visElems.filter((x) => x.type === 'group' && x.folded)" :key="'gf' + e.id" @click.stop="onGroupFold($event, e.id)">
+          <rect :x="e.x + dx - 6" :y="e.y + dy - 6" :width="e.w + 12" :height="e.h + 12" class="group-box folded" rx="8" />
+          <rect :x="e.x + dx + e.w / 2 - 30" :y="e.y + dy + e.h / 2 - 10" width="60" height="20" class="folded-body" rx="3" />
+          <text :x="e.x + dx + e.w / 2" :y="e.y + dy + e.h / 2 + 4" class="folded-val" text-anchor="middle">{{ groupEquiv(e.id) }}</text>
+        </g>
+
+        <!-- 电阻 -->
+        <g
+          v-for="e in visElems.filter((x) => x.type === 'res')" :key="e.id"
+          class="res-g" :class="{ sel: ops.selectedId === e.id }"
+          @click.stop="ops.select(e.id)"
+        >
+          <line :x1="e.x + e.w / 2 + dx" :y1="e.y + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + 10 + dy" class="wire" />
+          <line :x1="e.x + e.w / 2 + dx" :y1="e.y + e.h - 10 + dy" :x2="e.x + e.w / 2 + dx" :y2="e.y + e.h + dy" class="wire" />
+          <rect
+            :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 10 + dy" width="18" height="34" rx="2"
+            :class="['res-body', { unknown: e.unknown, invalid: e.invalid }]"
           />
-          <button v-if="seamMode" class="btn sm" :class="{ 'amber active': selected.unknown }" @click="toggleUnknown">未知</button>
-          <button class="btn sm cyan" @click="addSeries">+串联</button>
-          <button class="btn sm cyan" @click="addParallel">+并联</button>
-          <button class="btn sm danger" @click="removeSelected">删</button>
-        </template>
-        <!-- 组操作 -->
-        <template v-else-if="selIsGroup">
-          <span class="op-mode" @click="toggleGroupMode">
-            {{ selected.mode === 'series' ? '串联' : '并联' }} ⇄
-          </span>
-          <button class="btn sm cyan" @click="groupAddRes">+电阻</button>
-          <button class="btn sm" @click="groupAddGroup">+组</button>
-          <button class="btn sm" @click="onGroupFold(selected.id)">{{ selected.folded ? '展开' : '折叠' }}</button>
-          <button class="btn sm danger" @click="removeSelected">删</button>
-        </template>
-      </div>
-    </transition>
+          <rect :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 10 + dy" width="18" height="5" class="cap" />
+          <rect :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 39 + dy" width="18" height="5" class="cap" />
+          <rect v-for="(b, bi) in bands(e.label)" :key="bi" :x="e.x + (e.w - 18) / 2 + dx" :y="e.y + 17 + bi * 7 + dy" width="18" height="4" :fill="b" opacity="0.9" />
+          <text :x="e.x + e.w + dx - 2" :y="e.y + 20 + dy" class="res-label-t">{{ e.label }}</text>
+          <text :x="e.x + e.w + dx - 2" :y="e.y + 34 + dy" class="res-val-t" :class="{ 'unk-t': e.unknown }">{{ e.unknown ? '?' : formatOhms(e.ohms) }}</text>
+        </g>
+
+        <!-- 缝点 -->
+        <g v-for="s in L.seams" :key="s.id">
+          <circle
+            :cx="s.x + dx" :cy="s.y + dy" r="5"
+            :class="['seam-dot', { clickable: seamMode && s.id !== 'IN' && s.id !== 'GND' }]"
+            @click.stop="onSeamClick($event, s.id)"
+          />
+          <text v-if="s.id === 'IN'" :x="s.x + dx + 10" :y="s.y + dy - 6" class="port-label">Vin ↑</text>
+          <text v-else-if="s.id === 'GND'" :x="s.x + dx + 10" :y="s.y + dy + 14" class="port-label">GND</text>
+        </g>
+
+        <!-- 吸附高亮 -->
+        <g v-if="hoverSnap" :transform="`translate(${hoverSnap.x}, ${hoverSnap.y})`">
+          <circle r="14" class="snap-ring" />
+          <circle r="5" class="snap-dot" />
+        </g>
+      </svg>
+    </div>
+
+    <div class="zoom-hud" v-if="zoom !== 1">
+      <button class="btn sm" @click="zoom = Math.min(3, zoom * 1.25)">＋</button>
+      <span class="zoom-val">{{ Math.round(zoom * 100) }}%</span>
+      <button class="btn sm" @click="zoom = Math.max(0.3, zoom / 1.25)">－</button>
+      <button class="btn sm cyan" @click="zoom = 1; pan = { x: 0, y: 0 }">复位</button>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.circuit-wrap { position: relative; }
-.circuit {
+.canvas {
+  position: relative;
   width: 100%;
-  height: 300px; /* 固定视口高度，内容自适应缩放 */
-  background: var(--bg-deep);
+  height: 100%;
+  min-height: 360px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(0, 255, 159, 0.04), transparent 60%),
+    var(--bg-deep);
   border: 1px solid var(--border);
   border-radius: 10px;
-  display: block;
-  touch-action: manipulation;
+  cursor: grab;
+  touch-action: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+.canvas.panning { cursor: grabbing; }
+.canvas-inner { position: absolute; top: 0; left: 0; will-change: transform; }
+.circuit {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 .wire { stroke: var(--neon-dim); stroke-width: 2; }
 .group-box {
@@ -361,26 +331,31 @@ function bands(label) {
 }
 .seam-dot.clickable:hover { fill: var(--neon); }
 .port-label { fill: var(--dim); font-size: 10px; font-family: var(--mono); }
-
-.op-panel {
+.snap-ring {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  animation: pulse-glow 1s infinite;
+}
+.snap-dot { fill: var(--amber); }
+.zoom-hud {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  margin-top: 8px;
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--cyan-dim);
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(10, 14, 20, 0.85);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  flex-wrap: wrap;
 }
-.op-input { flex: 1; min-width: 120px; font-size: 13px !important; padding: 5px 8px !important; }
-.op-mode {
+.zoom-val {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--cyan);
-  border: 1px dashed var(--cyan-dim);
-  border-radius: 5px;
-  padding: 4px 8px;
-  cursor: pointer;
+  min-width: 40px;
+  text-align: center;
 }
 </style>

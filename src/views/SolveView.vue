@@ -1,12 +1,15 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import CircuitView from '../components/CircuitView.vue'
+import CircuitPalette from '../components/CircuitPalette.vue'
+import RightPanel from '../components/RightPanel.vue'
 import LedDisplay from '../components/LedDisplay.vue'
+import { useCircuit } from '../composables/useCircuit.js'
 import { allKnown } from '../core/simplify.js'
 import { solveUnknownWithVin } from '../core/solve.js'
 import { formatOhms, formatVolt, formatAmp } from '../core/parse.js'
 
-// 初始示例：分压 + 并联混合（垂直电路图）
+// 初始示例：分压 + 并联混合
 const root = reactive({
   type: 'group',
   id: 'root',
@@ -27,6 +30,8 @@ const root = reactive({
     { type: 'res', id: 'r4', label: 'R4', raw: '10k', ohms: 10000, unknown: false },
   ],
 })
+
+const ops = useCircuit(root)
 
 const vin = ref('5')
 const markSeamId = ref(null)
@@ -70,7 +75,7 @@ function solve() {
 
   const vIn = parseFloat(vin.value)
   if (isNaN(vIn) || vIn <= 0) { error.value = '请输入有效输入电压 Vin'; return }
-  if (unknownList.value.length === 0) { error.value = '请先标记一个未知电阻（点电阻 → 面板「未知」）'; return }
+  if (unknownList.value.length === 0) { error.value = '请先标记一个未知电阻（点电阻 → 右侧面板「标未知」）'; return }
   if (unknownList.value.length > 1) { error.value = '只能有一个未知电阻，请取消其他标记'; return }
   if (!constraint.value) { error.value = '请点击导线上的 ● 节点，设置目标电压'; return }
 
@@ -105,143 +110,165 @@ function solve() {
 </script>
 
 <template>
-  <div class="solve-view">
-    <div class="panel">
-      <div class="section-title">场景 2 · 给定节点电压反推电阻</div>
+  <div class="workspace">
+    <aside class="side-left">
+      <CircuitPalette :node="root" :ops="ops" />
 
-      <div class="vin-row">
-        <label>VIN 输入电压</label>
-        <input v-model="vin" type="text" class="vin-input" placeholder="如 5 / 12 / 3.3" />
-        <span class="unit">V</span>
-      </div>
-
-      <div class="guide">
-        <div class="guide-line">① 点电阻 → 面板标「未知」</div>
-        <div class="guide-line">② 点导线 ● 节点 → 输入目标电压</div>
-        <div class="guide-line">③ SOLVE 反推</div>
-      </div>
-
-      <CircuitView :node="root" :seam-mode="true" @mark-seam="onMarkSeam" />
-    </div>
-
-    <transition name="fade">
-      <div v-if="markSeamId" class="panel mark-panel">
-        <div class="section-title">节点电压 · {{ markSeamId }}</div>
-        <div class="mark-row">
-          <input v-model="markVolt" type="text" placeholder="目标电压，如 2" />
+      <div class="panel ctrl-box">
+        <div class="section-title">电源 / 约束</div>
+        <div class="ctrl-row">
+          <label>VIN</label>
+          <input v-model="vin" type="text" class="ctrl-input" placeholder="如 5" />
           <span class="unit">V</span>
-          <button class="btn" @click="confirmMark">确认</button>
-          <button class="btn danger sm" @click="clearMark">清除</button>
         </div>
+        <div class="ctrl-hint">
+          ① 点电阻 → 右侧「标未知」<br />
+          ② 点导线 ● 设目标电压<br />
+          ③ SOLVE
+        </div>
+        <div class="constraint" v-if="constraint">
+          <span class="led cyan">{{ constraint.seamId }} = {{ constraint.v }}V</span>
+          <button class="btn sm danger" @click="clearMark">×</button>
+        </div>
+        <button class="btn solve-btn" :disabled="solving" @click="solve">
+          {{ solving ? 'SOLVING…' : '▶ SOLVE' }}
+        </button>
+        <div v-if="error" class="error-box">⚠ {{ error }}</div>
       </div>
-    </transition>
+    </aside>
 
-    <div class="action-row">
-      <div class="constraint" v-if="constraint">
-        <span class="led cyan">约束: {{ constraint.seamId }} = {{ constraint.v }}V</span>
-        <button class="btn sm danger" @click="clearMark">×</button>
-      </div>
-      <button class="btn solve-btn" :disabled="solving" @click="solve">
-        {{ solving ? 'SOLVING…' : '▶ SOLVE' }}
-      </button>
-    </div>
+    <main class="canvas-mid">
+      <CircuitView :node="root" :ops="ops" :seam-mode="true" @mark-seam="onMarkSeam" />
+    </main>
 
-    <div v-if="error" class="error-box">⚠ {{ error }}</div>
-
-    <div v-if="result" class="result-area">
-      <LedDisplay
-        label="R? 未知电阻"
-        :value="formatOhms(result.ohms)"
-        tone="green"
-      />
-      <div class="verify-box">
-        <span class="led cyan">✓ VERIFIED</span>
-        <span class="verify-text">
-          {{ constraint.seamId }} 实际 {{ formatVolt(result.voltage) }}
-          （偏差 {{ formatVolt(Math.abs(result.errorV)) }}）
-        </span>
-      </div>
-
-      <div class="panel" v-if="resultDetail">
-        <div class="section-title">元件电流 / 功耗</div>
-        <div class="detail-table">
-          <div class="drow head">
-            <span>元件</span><span>阻值</span><span>端电压</span><span>电流</span><span>功耗</span>
+    <aside class="side-right">
+      <RightPanel :ops="ops" :seam-mode="true">
+        <div v-if="result" class="result-stack">
+          <LedDisplay label="R? 未知电阻" :value="formatOhms(result.ohms)" tone="green" />
+          <div class="verify-box">
+            <span class="led cyan">✓ VERIFIED</span>
+            <span class="verify-text">{{ constraint.seamId }} 实际 {{ formatVolt(result.voltage) }}（偏差 {{ formatVolt(Math.abs(result.errorV)) }}）</span>
           </div>
-          <div v-for="row in resultDetail" :key="row.label" class="drow">
-            <span class="led cyan">{{ row.label }}</span>
-            <span>{{ formatOhms(row.ohms) }}</span>
-            <span>{{ formatVolt(row.v) }}</span>
-            <span>{{ formatAmp(row.i) }}</span>
-            <span :class="{ 'hot': row.p > 0.25 }">{{ (row.p * 1000).toPrecision(3) }} mW</span>
+          <div class="detail-table panel" v-if="resultDetail">
+            <div class="section-title">元件电流 / 功耗</div>
+            <div class="drow head"><span>元件</span><span>阻值</span><span>电流</span><span>功耗</span></div>
+            <div v-for="row in resultDetail" :key="row.label" class="drow">
+              <span class="led cyan">{{ row.label }}</span>
+              <span>{{ formatOhms(row.ohms) }}</span>
+              <span>{{ formatAmp(row.i) }}</span>
+              <span :class="{ 'hot': row.p > 0.25 }">{{ (row.p * 1000).toPrecision(3) }} mW</span>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+      </RightPanel>
+
+      <transition name="fade">
+        <div v-if="markSeamId" class="panel mark-panel">
+          <div class="section-title">节点电压 · {{ markSeamId }}</div>
+          <div class="mark-row">
+            <input v-model="markVolt" type="text" placeholder="目标电压，如 2" />
+            <span class="unit">V</span>
+            <button class="btn" @click="confirmMark">确认</button>
+            <button class="btn danger sm" @click="clearMark">清除</button>
+          </div>
+        </div>
+      </transition>
+    </aside>
   </div>
 </template>
 
 <style scoped>
-.solve-view { display: flex; flex-direction: column; gap: 14px; }
-.vin-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.vin-input { max-width: 140px; }
-.unit { font-family: var(--mono); color: var(--dim); font-size: 13px; }
-.guide {
+.workspace {
+  display: flex;
+  gap: 12px;
+  height: calc(100vh - 64px);
+  align-items: stretch;
+}
+.side-left {
+  width: 200px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.canvas-mid { flex: 1; min-width: 0; }
+.side-right {
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ctrl-box { display: flex; flex-direction: column; gap: 10px; }
+.ctrl-row { display: flex; align-items: center; gap: 8px; }
+.ctrl-row label { flex-shrink: 0; }
+.ctrl-input { max-width: 90px; }
+.unit { font-family: var(--mono); color: var(--dim); font-size: 12px; }
+.ctrl-hint {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--dim);
+  line-height: 1.8;
   border: 1px dashed var(--border);
   border-radius: 6px;
-  padding: 8px 10px;
-  margin-bottom: 10px;
-  line-height: 1.9;
+  padding: 6px 8px;
 }
-.mark-panel { border-color: var(--cyan-dim); }
-.mark-row { display: flex; align-items: center; gap: 8px; }
-.mark-row input { max-width: 160px; }
-.action-row { display: flex; align-items: center; gap: 10px; }
 .constraint {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 13px;
-  padding: 6px 10px;
-  border: 1px solid var(--cyan-dim);
-  border-radius: 6px;
-  background: rgba(0,229,255,0.04);
-}
-.solve-btn { flex: 1; padding: 10px; font-size: 14px; letter-spacing: 4px; }
-.error-box {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--red);
-  border: 1px solid rgba(255,59,48,0.4);
-  background: rgba(255,59,48,0.05);
-  border-radius: 6px;
-  padding: 8px 10px;
-}
-.result-area { display: flex; flex-direction: column; gap: 10px; }
-.verify-box {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-family: var(--mono);
+  gap: 6px;
   font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.04);
+}
+.solve-btn { width: 100%; padding: 9px; font-size: 13px; letter-spacing: 3px; }
+.error-box {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  border: 1px solid rgba(255, 59, 48, 0.4);
+  background: rgba(255, 59, 48, 0.05);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.result-stack { display: flex; flex-direction: column; gap: 10px; }
+.verify-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
   padding: 8px 12px;
   border: 1px solid var(--neon-dim);
   border-radius: 6px;
-  background: rgba(0,255,159,0.04);
+  background: rgba(0, 255, 159, 0.04);
   animation: pulse-glow 2s infinite;
 }
 .verify-text { color: var(--text); }
 .detail-table { display: flex; flex-direction: column; gap: 2px; }
 .drow {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr;
   gap: 6px;
   font-family: var(--mono);
-  font-size: 11px;
-  padding: 4px 6px;
+  font-size: 10px;
+  padding: 3px 4px;
   border-bottom: 1px dashed var(--border);
 }
-.drow.head { color: var(--dim); font-size: 10px; letter-spacing: 1px; }
+.drow.head { color: var(--dim); font-size: 9px; letter-spacing: 1px; }
 .drow .hot { color: var(--amber); }
+.mark-panel { border-color: var(--cyan-dim); }
+.mark-row { display: flex; align-items: center; gap: 8px; }
+.mark-row input { max-width: 130px; }
+
+@media (max-width: 900px) {
+  .workspace { flex-direction: column; height: auto; }
+  .side-left { width: 100%; }
+  .canvas-mid { min-height: 420px; }
+  .side-right { width: 100%; }
+}
 </style>
