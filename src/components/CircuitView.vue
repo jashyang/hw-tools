@@ -107,28 +107,51 @@ function removeSelected() {
   selectedId.value = null
 }
 
-// 在选中元素之后加一个串联电阻（父组须为串联）
-function addSeriesAfter() {
+// 在该电阻上"串联一个"：父串联组→插入其后；其他→把该电阻包装成串联组
+function addSeries() {
   const n = selected.value
   const p = findParent(props.node, selectedId.value)
-  if (!n || !p || p.type !== 'group' || p.mode !== 'series') return
-  const idx = p.children.findIndex((c) => c.id === n.id)
+  if (!n || n.type !== 'res') return
   const nn = mkRes()
-  p.children.splice(idx + 1, 0, nn)
+  if (p && p.type === 'group' && p.mode === 'series') {
+    const idx = p.children.findIndex((c) => c.id === n.id)
+    p.children.splice(idx + 1, 0, nn)
+  } else if (p && p.type === 'group') {
+    const idx = p.children.findIndex((c) => c.id === n.id)
+    p.children.splice(idx, 1, {
+      type: 'group', id: `g${Math.random().toString(36).slice(2, 8)}`,
+      mode: 'series', folded: false, children: [n, nn],
+    })
+  }
   selectedId.value = nn.id
   selValue.value = ''
 }
-// 选中元素所在并联组追加一条支路
-function addParallelBranch() {
+// 在该电阻上"并联一个"：父并联组→追加支路；其他→把该电阻包装成并联组
+function addParallel() {
+  const n = selected.value
   const p = findParent(props.node, selectedId.value)
-  if (!p || p.type !== 'group' || p.mode !== 'parallel') return
+  if (!n || n.type !== 'res') return
   const nn = mkRes()
-  p.children.push(nn)
+  if (p && p.type === 'group' && p.mode === 'parallel') {
+    p.children.push(nn)
+  } else if (p && p.type === 'group') {
+    const idx = p.children.findIndex((c) => c.id === n.id)
+    p.children.splice(idx, 1, {
+      type: 'group', id: `g${Math.random().toString(36).slice(2, 8)}`,
+      mode: 'parallel', folded: false, children: [n, nn],
+    })
+  }
   selectedId.value = nn.id
   selValue.value = ''
 }
 function mkRes() {
-  return { type: 'res', id: `r${Math.random().toString(36).slice(2, 8)}`, label: 'R?', raw: '', ohms: null, unknown: false }
+  // label 自动编号：统计现有电阻数
+  let cnt = 0
+  ;(function walk(n) {
+    if (n.type === 'res') cnt++
+    else if (n.type === 'group') n.children.forEach(walk)
+  })(props.node)
+  return { type: 'res', id: `r${Math.random().toString(36).slice(2, 8)}`, label: `R${cnt + 1}`, raw: '', ohms: null, unknown: false }
 }
 
 // 组操作
@@ -149,10 +172,6 @@ function groupAddGroup() {
 
 const selIsRes = computed(() => selected.value && selected.value.type === 'res')
 const selIsGroup = computed(() => selected.value && selected.value.type === 'group')
-const selParentMode = computed(() => {
-  const p = findParent(props.node, selectedId.value)
-  return p && p.type === 'group' ? p.mode : null
-})
 
 // 折叠组隐藏的后代 id 集合（折叠时组内元素不渲染）
 const hiddenIds = computed(() => {
@@ -267,8 +286,8 @@ function bands(label) {
             @change="onValueCommit"
           />
           <button v-if="seamMode" class="btn sm" :class="{ 'amber active': selected.unknown }" @click="toggleUnknown">未知</button>
-          <button v-if="selParentMode === 'series'" class="btn sm cyan" @click="addSeriesAfter">+串联</button>
-          <button v-if="selParentMode === 'parallel'" class="btn sm cyan" @click="addParallelBranch">+并支</button>
+          <button class="btn sm cyan" @click="addSeries">+串联</button>
+          <button class="btn sm cyan" @click="addParallel">+并联</button>
           <button class="btn sm danger" @click="removeSelected">删</button>
         </template>
         <!-- 组操作 -->
