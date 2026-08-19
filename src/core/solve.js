@@ -38,7 +38,9 @@ export function propagate(root, vin) {
         cur = vLow;
       }
     } else {
-      // parallel：所有支路两端同压
+      // parallel：所有支路两端同压；组上/下公共缝 = 高端/低端
+      seams.set(`${node.id}:top`, vHigh)
+      seams.set(`${node.id}:bot`, vLow)
       for (const child of node.children) walk(child, vHigh, vLow);
     }
   }

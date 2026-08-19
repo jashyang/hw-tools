@@ -1,11 +1,11 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import ResistorTree from '../components/ResistorTree.vue'
+import CircuitView from '../components/CircuitView.vue'
 import LedDisplay from '../components/LedDisplay.vue'
 import { equivR, simplify, allKnown } from '../core/simplify.js'
 import { formatOhms } from '../core/parse.js'
 
-// 初始示例：三电阻并联（主场景）
+// 初始示例：三电阻并联（主场景，垂直电路图）
 const root = reactive({
   type: 'group',
   id: 'root',
@@ -24,18 +24,14 @@ const result = computed(() => {
   const R = simplify(root, steps)
   return { R, steps }
 })
-
-function onRemove(id) {
-  // 根组不可删除
-  if (id === 'root') return
-}
 </script>
 
 <template>
   <div class="equiv-view">
     <div class="panel">
-      <div class="section-title">场景 1 · 等效电阻（串并联递归化简）</div>
-      <ResistorTree :node="root" :seam-mode="false" @remove="onRemove" />
+      <div class="section-title">场景 1 · 等效电阻</div>
+      <div class="hint-line">点电阻改值 · 点组折叠/切换串并联 · 底部面板操作</div>
+      <CircuitView :node="root" :seam-mode="false" />
     </div>
 
     <div class="result-area">
@@ -62,6 +58,7 @@ function onRemove(id) {
 
 <style scoped>
 .equiv-view { display: flex; flex-direction: column; gap: 14px; }
+.hint-line { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-bottom: 8px; }
 .result-area { display: flex; flex-direction: column; gap: 6px; }
 .hint { font-size: 12px; text-align: center; font-family: var(--mono); }
 .steps { display: flex; flex-direction: column; gap: 4px; }

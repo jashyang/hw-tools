@@ -1,12 +1,12 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import ResistorTree from '../components/ResistorTree.vue'
+import CircuitView from '../components/CircuitView.vue'
 import LedDisplay from '../components/LedDisplay.vue'
-import { hasUnknown, allKnown } from '../core/simplify.js'
-import { solveUnknownWithVin, collectSeams } from '../core/solve.js'
-import { parseResistor, formatOhms, formatVolt, formatAmp } from '../core/parse.js'
+import { allKnown } from '../core/simplify.js'
+import { solveUnknownWithVin } from '../core/solve.js'
+import { formatOhms, formatVolt, formatAmp } from '../core/parse.js'
 
-// 初始示例：分压 + 并联混合
+// 初始示例：分压 + 并联混合（垂直电路图）
 const root = reactive({
   type: 'group',
   id: 'root',
@@ -29,9 +29,9 @@ const root = reactive({
 })
 
 const vin = ref('5')
-const markSeamId = ref(null) // 正在标记的缝
+const markSeamId = ref(null)
 const markVolt = ref('')
-const constraint = ref(null) // { seamId, v } 求解约束
+const constraint = ref(null)
 const solving = ref(false)
 const result = ref(null)
 const error = ref('')
@@ -70,12 +70,10 @@ function solve() {
 
   const vIn = parseFloat(vin.value)
   if (isNaN(vIn) || vIn <= 0) { error.value = '请输入有效输入电压 Vin'; return }
-  if (unknownList.value.length === 0) { error.value = '请先标记一个未知电阻（点电阻上的「未知」按钮）'; return }
+  if (unknownList.value.length === 0) { error.value = '请先标记一个未知电阻（点电阻 → 面板「未知」）'; return }
   if (unknownList.value.length > 1) { error.value = '只能有一个未知电阻，请取消其他标记'; return }
-  if (!constraint.value) { error.value = '请点击电路连线上的 ● 焊盘，设置目标节点电压'; return }
-  if (allKnown(root)) { error.value = '未知电阻未标记为「未知」但已有阻值？请检查'; return }
+  if (!constraint.value) { error.value = '请点击导线上的 ● 节点，设置目标电压'; return }
 
-  // 定位未知电阻 id
   let unkId = null
   ;(function walk(n) {
     if (n.type === 'res' && n.unknown) unkId = n.id
@@ -89,7 +87,6 @@ function solve() {
       error.value = r.error
     } else {
       result.value = r
-      // 细节表
       const rows = []
       ;(function walk(n) {
         if (n.type === 'res') {
@@ -119,15 +116,14 @@ function solve() {
       </div>
 
       <div class="guide">
-        <div class="guide-line">① 把要求解的电阻点成 <span class="tag amber">未知</span></div>
-        <div class="guide-line">② 点击连线上的 <span class="tag green">●</span> 焊盘，输入该点目标电压</div>
-        <div class="guide-line">③ 点击 <span class="tag cyan">SOLVE</span> 反推阻值</div>
+        <div class="guide-line">① 点电阻 → 面板标「未知」</div>
+        <div class="guide-line">② 点导线 ● 节点 → 输入目标电压</div>
+        <div class="guide-line">③ SOLVE 反推</div>
       </div>
 
-      <ResistorTree :node="root" :seam-mode="true" @mark-seam="onMarkSeam" />
+      <CircuitView :node="root" :seam-mode="true" @mark-seam="onMarkSeam" />
     </div>
 
-    <!-- 缝标记面板 -->
     <transition name="fade">
       <div v-if="markSeamId" class="panel mark-panel">
         <div class="section-title">节点电压 · {{ markSeamId }}</div>
@@ -140,7 +136,6 @@ function solve() {
       </div>
     </transition>
 
-    <!-- 约束与求解 -->
     <div class="action-row">
       <div class="constraint" v-if="constraint">
         <span class="led cyan">约束: {{ constraint.seamId }} = {{ constraint.v }}V</span>
@@ -153,7 +148,6 @@ function solve() {
 
     <div v-if="error" class="error-box">⚠ {{ error }}</div>
 
-    <!-- 结果 -->
     <div v-if="result" class="result-area">
       <LedDisplay
         label="R? 未知电阻"
@@ -202,10 +196,6 @@ function solve() {
   margin-bottom: 10px;
   line-height: 1.9;
 }
-.tag { padding: 0 4px; border-radius: 3px; }
-.tag.amber { color: var(--amber); background: var(--amber-dim); }
-.tag.green { color: var(--neon); background: var(--neon-dim); }
-.tag.cyan { color: var(--cyan); background: var(--cyan-dim); }
 .mark-panel { border-color: var(--cyan-dim); }
 .mark-row { display: flex; align-items: center; gap: 8px; }
 .mark-row input { max-width: 160px; }
