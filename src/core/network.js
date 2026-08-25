@@ -120,3 +120,114 @@ export function solveUnknownResistor(rows, vcc, v, ref) {
   if (x == null || !isFinite(x) || x <= 0) return null
   return { rx: x, rTotal: rTotal(x) }
 }
+
+// ── 多电压点反推：Vcc 可选，任意 ≥1 个电压点（含 Vcc 时）或 ≥2 个电压点（无 Vcc） ──
+// rows: [{mode, values:[Ω|null...]}]，恰好一个 null（待求 x）
+// vcc: 顶部电压（Ω 数值）或 null（未知，靠电压点反推）
+// points: [{index, v}]，index=节点位置（第 index 行之后，1..N-1），v=该点对地电压
+// 隐含 GND：节点 N 电压 0（最末端）
+// 返回 {rx, rTotal, vcc}（vcc 为反推值或原值）或 null
+export function solveVoltagePoints(rows, vcc, points) {
+  if (!rows || !rows.length || !points || !points.length) return null
+  // 电压点位置合法性：1..N-1
+  const N = rows.length
+  const pts = points
+    .filter((p) => p && p.index >= 1 && p.index < N && p.v != null && isFinite(p.v) && p.v > 0)
+    .map((p) => ({ index: p.index, v: p.v }))
+    .sort((a, b) => a.index - b.index)
+  if (!pts.length) return null
+  // 位置去重
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i].index === pts[i - 1].index) return null
+  }
+
+  // 每行等效值随 x 变化的函数（与 solveUnknownResistor 相同）
+  const fns = rows.map((row) => {
+    if (!row.values || row.values.length === 0) return () => 0 // 空行跳过（等效 0Ω）
+    const known = row.values.filter((val) => val != null && isFinite(val) && val > 0)
+    const hasX = row.values.some((val) => val == null)
+    if (!hasX) {
+      const eq = rowEquiv(row.mode, known)
+      return isFinite(eq) ? () => eq : null
+    }
+    if (known.length === 0) return (x) => x
+    if (row.mode === 'series') {
+      const base = known.reduce((a, b) => a + b, 0)
+      return (x) => base + x
+    }
+    const invKnown = known.reduce((a, b) => a + 1 / b, 0)
+    return (x) => 1 / (invKnown + 1 / x)
+  })
+  if (fns.some((f) => f === null)) return null
+  if (!rows.some((row) => row.values.some((val) => val == null))) return null
+
+  const rTotal = (x) => fns.reduce((a, f) => a + f(x), 0)
+  const below = (x, k) => {
+    let s = 0
+    for (let i = k; i < fns.length; i++) s += fns[i](x)
+    return s
+  }
+
+  // 二分求比值方程：ratioFn(x) = target（单调）
+  const bisect = (ratioFn, target) => {
+    let lo = 1e-3, hi = 1e12
+    let fLo = ratioFn(lo) - target
+    let fHi = ratioFn(hi) - target
+    if (fLo * fHi > 0) return null
+    let x = null
+    for (let i = 0; i < 300; i++) {
+      x = (lo + hi) / 2
+      const fx = ratioFn(x) - target
+      if (Math.abs(fx) < 1e-14 || (hi - lo) / x < 1e-12) break
+      if (fx * fLo < 0) hi = x
+      else { lo = x; fLo = fx }
+    }
+    return x != null && isFinite(x) && x > 0 ? x : null
+  }
+
+  // 回代校验：给定 x，算各电压点电压并与输入比对（相对误差容差）
+  const verify = (x, vccGuess) => {
+    const Rt = rTotal(x)
+    for (const p of pts) {
+      const vCalc = vccGuess * below(x, p.index) / Rt
+      if (Math.abs(vCalc - p.v) > 1e-6 * Math.max(p.v, 1e-9)) return false
+    }
+    return true
+  }
+
+  // 各节点对地电压（结果展示用）：nodeVoltages[index] = V
+  const nodeVoltages = (x, vccGuess) => {
+    const Rt = rTotal(x)
+    const out = []
+    for (const p of pts) out.push({ index: p.index, v: vccGuess * below(x, p.index) / Rt })
+    return out
+  }
+
+  let candidate = null
+
+  if (vcc != null && isFinite(vcc) && vcc > 0) {
+    // Vcc 已知：用第一个电压点求 x：v_1/vcc = below(index1)/R_total
+    const p0 = pts[0]
+    const ratioFn = (x) => below(x, p0.index) / rTotal(x)
+    const x = bisect(ratioFn, p0.v / vcc)
+    if (x != null && verify(x, vcc)) candidate = { rx: x, rTotal: rTotal(x), vcc, nodes: nodeVoltages(x, vcc) }
+  } else {
+    // Vcc 未知：需要 ≥2 个点，用相邻点对比例求 x，再回代全部点
+    if (pts.length < 2) return null
+    // 依次尝试相邻点对（a 在上，b 在下）：v_a/v_b = below(a)/below(b)
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1]
+      if (a.v <= b.v) continue // 电压必须沿链递减，否则物理不可能
+      const ratioFn = (x) => below(x, a.index) / below(x, b.index)
+      const x = bisect(ratioFn, a.v / b.v)
+      if (x == null) continue
+      // 用第一个点反推 vcc
+      const vccGuess = a.v * rTotal(x) / below(x, a.index)
+      if (vccGuess > 0 && verify(x, vccGuess)) {
+        candidate = { rx: x, rTotal: rTotal(x), vcc: vccGuess, nodes: nodeVoltages(x, vccGuess) }
+        break
+      }
+    }
+  }
+  return candidate
+}

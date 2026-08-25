@@ -2,7 +2,7 @@
 import { scenes } from '/home/hermes/projects/hw-tools/src/core/scenes.js'
 import {
   rowEquiv, networkEquiv, dividerRx,
-  seriesSum, parallelSum, solveUnknownResistor,
+  seriesSum, parallelSum, solveUnknownResistor, solveVoltagePoints,
 } from '/home/hermes/projects/hw-tools/src/core/network.js'
 
 const byId = Object.fromEntries(scenes.map((s) => [s.id, s]))
@@ -98,6 +98,55 @@ check('solve: V>=Vcc → null', solveUnknownResistor(
 check('solve: 全已知无未知 → null', solveUnknownResistor(
   [{ mode: 'series', values: [1000] }, { mode: 'series', values: [1000] }],
   12, 6, { type: 'node', index: 1 }
+), null)
+
+// ── 多电压点反推（Vcc 可选） ──
+// 经典：Vcc=5 已知 + 1 电压点（第1行后=0.596V），行1=100k 待求行2 → x=13.533k
+// 节点1 电压 = Vcc×Rx/(100k+Rx) = 0.596 → Rx = 13.533k
+{
+  const s = solveVoltagePoints(
+    [{ mode: 'series', values: [100000] }, { mode: 'series', values: [null] }],
+    5, [{ index: 1, v: 0.596 }]
+  )
+  approx('vpts: Vcc+1点 经典分压 → x=13.533k', s.rx, 13533.151680289553)
+  approx('vpts: 反推 vcc 保留原值', s.vcc, 5)
+}
+// 无 Vcc：3 行网络（100k | 待求x | 1k），节点1=4V、节点2=0.596V
+// v1/v2 = (x+1k)/1k = 4/0.596 → x = 5711
+{
+  const s = solveVoltagePoints(
+    [{ mode: 'series', values: [100000] }, { mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
+    null, [{ index: 1, v: 4 }, { index: 2, v: 0.596 }]
+  )
+  approx('vpts: 无Vcc 2点 → x=5711', s.rx, 5711.409395973154)
+  approx('vpts: 无Vcc 反推 vcc>0', s.vcc > 0, true)
+}
+// 多电压点校验：Vcc=12 已知 + 2 点（节点1=8V、节点2=4V），行1=1k 待求行2 行3=1k
+// 节点2 = 12×1k/(1k+x+1k) = 4 → x = 1k
+{
+  const s = solveVoltagePoints(
+    [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
+    12, [{ index: 1, v: 8 }, { index: 2, v: 4 }]
+  )
+  approx('vpts: Vcc+2点校验 → x=1k', s.rx, 1000)
+}
+// 矛盾输入 → null：两个点电压不满足同一网络（节点2 应=4V 却给 6V）
+check('vpts: 矛盾输入 → null', solveVoltagePoints(
+  [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
+  12, [{ index: 1, v: 8 }, { index: 2, v: 6 }]
+), null)
+check('vpts: 位置越界 → null', solveVoltagePoints(
+  [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }],
+  5, [{ index: 5, v: 1 }]
+), null)
+check('vpts: 电压点电压非递增 → null', solveVoltagePoints(
+  [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
+  null, [{ index: 1, v: 4 }, { index: 2, v: 8 }]
+), null)
+// Vcc 已知但电压点比 Vcc 高 → null
+check('vpts: 电压点高于Vcc → null', solveVoltagePoints(
+  [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }],
+  5, [{ index: 1, v: 8 }]
 ), null)
 
 // ── 功率计算 ──

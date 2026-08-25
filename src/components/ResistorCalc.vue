@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { parseResistor, formatOhms, formatVolt, formatAmp, parseVolt } from '../core/parse.js'
-import { rowEquiv, networkEquiv, solveUnknownResistor } from '../core/network.js'
+import { rowEquiv, networkEquiv, solveVoltagePoints } from '../core/network.js'
 
 // ── 模式：等效电阻 / 分压电阻 ──
 const mode = ref('equiv')
@@ -14,11 +14,10 @@ function newRow() {
 const rows = reactive([newRow()])
 
 // ── 分压模式输入 ──
-const vcc = ref('')
-const v = ref('')
-// 电压条件位置：row = 某行两端压降；node = 某节点对地（节点 i 在第 i 行之后，节点 0=Vcc 顶端）
-const refType = ref('row')
-const refIndex = ref(0)
+const vcc = ref('') // 可选：填了作为顶部电压点；不填则用 ≥2 个电压点反推
+// 电压点列表：{id, index(第 index 行之后), v(对地电压)}
+let ptSeq = 0
+const points = reactive([{ id: ++ptSeq, index: 1, v: '' }])
 // 待求电阻：{row, res} 指向 rows[row].resistors[res]；null = 未指定
 const target = ref(null)
 
@@ -53,21 +52,46 @@ const rowTotal = (row) => {
 
 // ── 结果 ──
 const vccVal = computed(() => parseVolt(vcc.value))
-const vVal = computed(() => parseVolt(v.value))
 const vccInvalid = computed(() => vcc.value.trim() !== '' && vccVal.value === null)
-const vInvalid = computed(() => v.value.trim() !== '' && vVal.value === null)
 
-// 电压条件位置是否合法
-const refValid = computed(() => {
-  const n = rows.length
-  if (refType.value === 'row') return refIndex.value >= 0 && refIndex.value < n
-  return refIndex.value >= 1 && refIndex.value < n // node: 1..N-1（0=Vcc、N=GND 无意义）
+// 电压点解析与校验
+const parsedPoints = computed(() =>
+  points.map((p) => ({
+    id: p.id,
+    index: p.index,
+    v: parseVolt(p.v),
+    invalid: p.v.trim() !== '' && parseVolt(p.v) === null,
+    empty: p.v.trim() === '',
+  }))
+)
+// 有效电压点（填了电压的）
+const validPoints = computed(() => parsedPoints.value.filter((p) => !p.empty && !p.invalid))
+// 位置是否重复
+const dupIndex = computed(() => {
+  const seen = new Set()
+  for (const p of parsedPoints.value) {
+    if (p.empty) continue
+    if (seen.has(p.index)) return p.index
+    seen.add(p.index)
+  }
+  return null
+})
+// 电压点位置是否合法（节点 1..N-1）
+const indexValid = (idx) => idx >= 1 && idx < rows.length
+
+// 电压点是否足够：Vcc 填了 → ≥1 个；没填 → ≥2 个
+const pointsEnough = computed(() => {
+  if (vcc.value.trim() !== '') return validPoints.value.length >= 1
+  return validPoints.value.length >= 2
 })
 
-// 当前电压条件文本（结果显示用）
-const refLabel = computed(() => {
-  if (refType.value === 'row') return `第 ${refIndex.value + 1} 行两端压降`
-  return `节点 ${refIndex.value} 对地`
+// 电压点位置是否都已指定且合法
+const pointsIndexOk = computed(() => {
+  for (const p of parsedPoints.value) {
+    if (p.empty) continue
+    if (!indexValid(p.index)) return false
+  }
+  return true
 })
 
 const result = computed(() => {
@@ -85,10 +109,16 @@ const result = computed(() => {
   // divider 模式
   if (!validRows.value.length) return { error: '请先填写电阻网络' }
   if (validRows.value.some((r) => r.invalid)) return { error: '有电阻值格式不对，示例：1k / 2.2k / 470' }
-  if (vccInvalid.value || vInvalid.value) return { error: '电压格式不对，示例：12 / 5V' }
-  if (vcc.value.trim() === '' || v.value.trim() === '') return { error: '请填写电源电压 Vcc 和给定电压 V' }
+  if (vccInvalid.value) return { error: 'Vcc 格式不对，示例：12 / 5V' }
+  if (parsedPoints.value.some((p) => p.invalid)) return { error: '电压点电压格式不对，示例：5 / 3.3V' }
   if (!target.value) return { error: '请点一个电阻的「算」，把它设为待求 Rx' }
-  if (!refValid.value) return { error: '电压条件位置无效' }
+  if (!pointsIndexOk.value) return { error: '电压点位置无效（需在第 1~N-1 行之后）' }
+  if (dupIndex.value != null) return { error: `电压点位置重复：第 ${dupIndex.value} 行之后` }
+  if (!pointsEnough.value) {
+    return vcc.value.trim() !== ''
+      ? { error: '请至少填写 1 个电压点' }
+      : { error: '未填 Vcc 时请至少填写 2 个电压点' }
+  }
 
   // 构造求解输入：target 指向的电阻值为 null（未知），空输入忽略，其余按输入解析
   const netRows = rows.map((row, i) => {
@@ -111,21 +141,29 @@ const result = computed(() => {
       }
     }
   }
-  const sol = solveUnknownResistor(netRows, vccVal.value, vVal.value, {
-    type: refType.value,
-    index: refIndex.value,
-  })
-  if (!sol) return { error: '无解：检查电压条件与电阻网络是否一致（V 需在 0~Vcc 之间且条件可达）' }
-  const ratio = vVal.value / vccVal.value
-  const current = vccVal.value / sol.rTotal
-  return {
-    results: [
-      { label: '待求电阻 Rx', value: formatOhms(sol.rx), note: `「算」标记位置：第 ${target.value.row + 1} 行第 ${target.value.res + 1} 个` },
-      { label: '总等效电阻', value: formatOhms(sol.rTotal) },
-      { label: '回路电流', value: formatAmp(current) },
-      { label: '电压条件', value: formatVolt(vVal.value), note: `${refLabel.value} = ${formatVolt(vVal.value)}（Vcc ${formatVolt(vccVal.value)} 的 ${(ratio * 100).toFixed(1)}%）` },
-    ],
+  const sol = solveVoltagePoints(
+    netRows,
+    vcc.value.trim() !== '' ? vccVal.value : null,
+    validPoints.value.map((p) => ({ index: p.index, v: p.v }))
+  )
+  if (!sol) return { error: '无解：电压点电压与电阻网络不一致（电压需沿链递减且条件可达）' }
+  const current = (sol.vcc != null && sol.vcc > 0) ? sol.vcc / sol.rTotal : null
+  const results = [
+    { label: '待求电阻 Rx', value: formatOhms(sol.rx), note: `「算」标记位置：第 ${target.value.row + 1} 行第 ${target.value.res + 1} 个` },
+    { label: '总等效电阻', value: formatOhms(sol.rTotal) },
+  ]
+  if (sol.vcc != null && sol.vcc > 0) {
+    results.push({ label: '电源电压 Vcc', value: formatVolt(sol.vcc), note: vcc.value.trim() !== '' ? '' : '反推值' })
   }
+  if (current != null && isFinite(current)) {
+    results.push({ label: '回路电流', value: formatAmp(current) })
+  }
+  // 各电压点回代验证（用求解器算出的节点电压）
+  for (const p of validPoints.value) {
+    const nd = (sol.nodes || []).find((n) => n.index === p.index)
+    results.push({ label: `电压点(第${p.index}行后)`, value: formatVolt(p.v), note: nd ? `回代 ${formatVolt(nd.v)}` : '' })
+  }
+  return { results }
 })
 
 // ── 行操作 ──
@@ -135,9 +173,7 @@ function removeRow(i) {
   rows.splice(i, 1)
   if (target.value && target.value.row === i) target.value = null
   else if (target.value && target.value.row > i) target.value = { ...target.value, row: target.value.row - 1 }
-  // 修正 refIndex 越界
-  if (refType.value === 'row' && refIndex.value >= rows.length) refIndex.value = rows.length - 1
-  if (refType.value === 'node' && refIndex.value >= rows.length) refIndex.value = rows.length - 1
+  // 电压点位置越界由模板 invalid 提示，不强制修正
 }
 function addResistor(row) { row.resistors.push('') }
 function removeResistor(row, j) {
@@ -159,6 +195,19 @@ function setTarget(row, j) {
 // 该电阻是否为待求
 function isTarget(row, j) {
   return !!target.value && target.value.row === row && target.value.res === j
+}
+
+// ── 电压点操作 ──
+function addPoint() {
+  // 默认取第一个未使用的合法位置
+  const used = new Set(points.map((p) => p.index))
+  let idx = 1
+  while (used.has(idx) && idx < rows.length) idx++
+  points.push({ id: ++ptSeq, index: idx < rows.length ? idx : 1, v: '' })
+}
+function removePoint(i) {
+  if (points.length <= 1) return
+  points.splice(i, 1)
 }
 
 // ── 复制 ──
@@ -193,31 +242,30 @@ async function copyResult() {
     <!-- 分压模式：电压输入 -->
     <div v-if="mode === 'divider'" class="divider-inputs">
       <div class="field">
-        <label class="field-label"><span class="fname">电源电压 Vcc</span><span class="funit">V</span></label>
-        <input v-model="vcc" type="text" inputmode="decimal" class="field-input" :class="{ invalid: vccInvalid }" placeholder="如 12" autocomplete="off" spellcheck="false" />
+        <label class="field-label"><span class="fname">电源电压 Vcc</span><span class="funit">V·可选</span></label>
+        <input v-model="vcc" type="text" inputmode="decimal" class="field-input" :class="{ invalid: vccInvalid }" placeholder="可不填" autocomplete="off" spellcheck="false" />
       </div>
-      <div class="field">
-        <label class="field-label"><span class="fname">给定电压 V</span><span class="funit">V</span></label>
-        <input v-model="v" type="text" inputmode="decimal" class="field-input" :class="{ invalid: vInvalid }" placeholder="如 5" autocomplete="off" spellcheck="false" />
-      </div>
-      <!-- 电压条件位置 -->
+      <!-- 电压点列表 -->
       <div class="field ref-field">
-        <label class="field-label"><span class="fname">电压位置</span></label>
-        <div class="ref-row">
-          <div class="seg">
-            <button class="seg-btn" :class="{ on: refType === 'row' }" @click="refType = 'row'">行两端</button>
-            <button class="seg-btn" :class="{ on: refType === 'node' }" @click="refType = 'node'; refIndex = 1">节点对地</button>
-          </div>
-          <select v-model.number="refIndex" class="ref-select" :class="{ invalid: !refValid }">
-            <template v-if="refType === 'row'">
-              <option v-for="i in rows.length" :key="i" :value="i - 1">第 {{ i }} 行</option>
-            </template>
-            <template v-else>
-              <option v-for="i in rows.length - 1" :key="i" :value="i">节点 {{ i }}</option>
-            </template>
+        <label class="field-label"><span class="fname">电压点（对地）</span><span class="funit">{{ validPoints.length }} 个有效</span></label>
+        <div v-for="(pt, i) in points" :key="pt.id" class="pt-row">
+          <select v-model.number="pt.index" class="ref-select" :class="{ invalid: !indexValid(pt.index) || dupIndex === pt.index }">
+            <option v-for="k in rows.length - 1" :key="k" :value="k">第 {{ k }} 行之后</option>
           </select>
+          <input
+            v-model="pt.v"
+            type="text"
+            inputmode="decimal"
+            class="field-input pt-v"
+            :class="{ invalid: parsedPoints[i] && parsedPoints[i].invalid }"
+            placeholder="如 3.3"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button v-if="points.length > 1" class="btn danger sm pt-del" @click="removePoint(i)">✕</button>
         </div>
-        <div class="ref-hint">行两端 = 该行压降；节点 i 对地 = 第 i 行之后到 GND 的电压</div>
+        <button class="btn cyan sm pt-add" @click="addPoint">＋ 添加电压点</button>
+        <div class="ref-hint">电压点 = 该位置对地电压；填了 Vcc 至少 1 个点，没填 Vcc 至少 2 个点</div>
       </div>
     </div>
 
@@ -386,7 +434,7 @@ async function copyResult() {
 }
 .row-del { flex-shrink: 0; width: 28px; }
 
-/* 电压条件位置 */
+/* 电压点位置 */
 .ref-field { flex-basis: 100%; }
 .ref-row {
   display: flex;
@@ -394,6 +442,16 @@ async function copyResult() {
   align-items: center;
   flex-wrap: wrap;
 }
+.pt-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.pt-row .ref-select { flex-shrink: 0; }
+.pt-v { flex: 1; min-width: 100px; }
+.pt-del { flex-shrink: 0; width: 28px; }
+.pt-add { align-self: flex-start; }
 .ref-select {
   font-family: var(--mono);
   font-size: 12px;
