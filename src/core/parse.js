@@ -22,13 +22,14 @@ export function parseResistor(str) {
 
 // 格式化 Ω → 工程单位字符串
 export function formatOhms(ohms) {
-  if (ohms == null || !isFinite(ohms)) return '—';
-  const abs = Math.abs(ohms);
-  if (abs >= 1e9) return trim((ohms / 1e9)) + 'GΩ';
-  if (abs >= 1e6) return trim(ohms / 1e6) + 'MΩ';
-  if (abs >= 1e3) return trim(ohms / 1e3) + 'kΩ';
-  if (abs >= 1) return trim(ohms) + 'Ω';
-  return trim(ohms * 1e3) + 'mΩ';
+  if (ohms == null || !isFinite(ohms)) return '—'
+  const abs = Math.abs(ohms)
+  if (abs >= 1e12) return trim(ohms / 1e12) + 'TΩ'
+  if (abs >= 1e9) return trim(ohms / 1e9) + 'GΩ'
+  if (abs >= 1e6) return trim(ohms / 1e6) + 'MΩ'
+  if (abs >= 1e3) return trim(ohms / 1e3) + 'kΩ'
+  if (abs >= 1) return trim(ohms) + 'Ω'
+  return trim(ohms * 1e3) + 'mΩ'
 }
 
 function trim(n) {
@@ -39,11 +40,13 @@ function trim(n) {
 
 // 格式化电压/电流数值
 export function formatVolt(v) {
-  if (v == null || !isFinite(v)) return '—';
-  const abs = Math.abs(v);
-  if (abs >= 1e3) return trim(v / 1e3) + 'kV';
-  if (abs >= 1) return trim(v) + 'V';
-  return trim(v * 1e3) + 'mV';
+  if (v == null || !isFinite(v)) return '—'
+  const abs = Math.abs(v)
+  if (abs >= 1e3) return trim(v / 1e3) + 'kV'
+  if (abs >= 1) return trim(v) + 'V'
+  if (abs >= 1e-3) return trim(v * 1e3) + 'mV'
+  if (abs >= 1e-6) return trim(v * 1e6) + 'µV'
+  return trim(v * 1e9) + 'nV'
 }
 export function formatAmp(a) {
   if (a == null || !isFinite(a)) return '—';

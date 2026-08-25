@@ -105,7 +105,7 @@ export function solveUnknownResistor(rows, vcc, v, ref) {
 
   const target = v / vcc
   // x 在 [lo,hi] 内二分（单调函数，用边界定方向）；相对精度收敛
-  let lo = 1e-3, hi = 1e12
+  let lo = 1e-6, hi = 1e15
   let fLo = ratioFn(lo) - target
   let fHi = ratioFn(hi) - target
   if (fLo * fHi > 0) return null // 同号：目标电压比不在可达范围内
@@ -179,7 +179,7 @@ export function solveVoltagePoints(rows, vcc, points) {
 
   // 二分求比值方程：ratioFn(x) = target（单调）
   const bisect = (ratioFn, target) => {
-    let lo = 1e-3, hi = 1e12
+    let lo = 1e-6, hi = 1e15
     let fLo = ratioFn(lo) - target
     let fHi = ratioFn(hi) - target
     if (fLo * fHi > 0) return null

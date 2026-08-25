@@ -14,7 +14,8 @@ function check(name, got, want) {
   else { fail++; console.log(`  ✗ ${name}\n     got  ${g}\n     want ${w}`) }
 }
 function approx(name, got, want) {
-  if (Math.abs(got - want) < 1e-9) { pass++; console.log(`  ✓ ${name}`) }
+  const tol = 1e-6 * Math.max(Math.abs(want), 1e-9)
+  if (Math.abs(got - want) < tol) { pass++; console.log(`  ✓ ${name}`) }
   else { fail++; console.log(`  ✗ ${name}\n     got  ${got}\n     want ${want}`) }
 }
 

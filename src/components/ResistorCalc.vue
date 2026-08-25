@@ -91,6 +91,11 @@ const pointsIndexOk = computed(() => {
 
 // 某节点是否已设电压点（访问响应式属性，确保 Vue 追踪依赖）
 const isPoint = (idx) => pointVals[idx] !== undefined
+// 电压点输入格式是否非法（空/未激活不判非法）
+const pointInvalid = (idx) => {
+  const raw = pointVals[idx]
+  return raw != null && raw.trim() !== '' && parseVolt(raw) === null
+}
 // 切换某节点为电压点（再次点击清除）
 function togglePoint(idx) {
   if (isPoint(idx)) {
@@ -315,6 +320,17 @@ async function copyResult() {
                 :title="isPoint(segNodeAfterResistor(i, j)) ? '取消电压点' : '在此设置电压点'"
                 @click="togglePoint(segNodeAfterResistor(i, j))"
               >●</button>
+              <input
+                v-if="mode === 'divider' && row.mode === 'series' && j < row.resistors.length - 1 && isPoint(segNodeAfterResistor(i, j))"
+                v-model="pointVals[segNodeAfterResistor(i, j)]"
+                type="text"
+                inputmode="decimal"
+                class="field-input pt-inline"
+                :class="{ invalid: pointInvalid(segNodeAfterResistor(i, j)) }"
+                placeholder="对地电压"
+                autocomplete="off"
+                spellcheck="false"
+              />
             </template>
             <button class="btn cyan sm r-add" @click="addResistor(row)">＋</button>
           </div>
@@ -336,7 +352,7 @@ async function copyResult() {
             type="text"
             inputmode="decimal"
             class="field-input pt-v"
-            :class="{ invalid: pointVals[segRows.rows[i].end] && pointVals[segRows.rows[i].end].trim() !== '' && parseVolt(pointVals[segRows.rows[i].end]) === null }"
+            :class="{ invalid: pointInvalid(segRows.rows[i].end) }"
             placeholder="对地电压，如 3.3"
             autocomplete="off"
             spellcheck="false"
@@ -532,6 +548,12 @@ async function copyResult() {
   flex: 1;
   min-width: 100px;
   max-width: 180px;
+}
+/* 行内节点电压输入框（电阻之间的 ● 激活后弹出，窄一点不挤压电阻框） */
+.pt-inline {
+  flex: 0 1 110px;
+  min-width: 90px;
+  max-width: 140px;
 }
 /* 行内电阻之间的节点 ●（小号） */
 .node-btn.inline {
