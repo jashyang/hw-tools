@@ -71,8 +71,8 @@ const pointEntries = computed(() =>
 )
 // 有效电压点（填了电压的）
 const validPoints = computed(() => pointEntries.value.filter((p) => !p.empty && !p.invalid))
-// 电压点位置是否合法（节点 1..N-1）
-const indexValid = (idx) => idx >= 1 && idx < rows.length
+// 电压点位置是否合法（段边界节点 1..total-1）
+const indexValid = (idx) => idx >= 1 && idx < segRows.value.total
 
 // 电压点是否足够：Vcc 填了 → ≥1 个；没填 → ≥2 个
 const pointsEnough = computed(() => {
@@ -98,6 +98,33 @@ function togglePoint(idx) {
   } else {
     pointVals[idx] = ''
   }
+}
+
+// ── 段粒度映射：串联行每个电阻=1段，并联行整行=1段 ──
+// segRows[i] = {kind, start(段起始), end(段结束,即行尾节点号)}
+const segRows = computed(() => {
+  const out = []
+  let off = 0
+  for (const row of rows) {
+    if (row.mode === 'parallel') {
+      out.push({ kind: 'parallel', start: off, end: off + 1 })
+      off += 1
+    } else {
+      out.push({ kind: 'series', start: off, end: off + row.resistors.length })
+      off += row.resistors.length
+    }
+  }
+  return { rows: out, total: off }
+})
+// 行 i 的段起始
+const rowSegStart = (i) => (segRows.value.rows[i] ? segRows.value.rows[i].start : 0)
+// 段边界节点号：行内电阻 j 之后（串联行）
+const segNodeAfterResistor = (i, j) => rowSegStart(i) + j + 1
+// 节点描述文本（结果显示/提示用）
+const nodeLabel = (idx) => {
+  if (idx <= 0) return 'Vcc 顶端'
+  if (idx >= segRows.value.total) return 'GND'
+  return `节点 ${idx}（第 ${idx} 段之后）`
 }
 
 const result = computed(() => {
@@ -166,7 +193,7 @@ const result = computed(() => {
   // 各电压点回代验证（用求解器算出的节点电压）
   for (const p of validPoints.value) {
     const nd = (sol.nodes || []).find((n) => n.index === p.index)
-    results.push({ label: `电压点(第${p.index}行后)`, value: formatVolt(p.v), note: nd ? `回代 ${formatVolt(nd.v)}` : '' })
+    results.push({ label: `电压点${nodeLabel(p.index)}`, value: formatVolt(p.v), note: nd ? `回代 ${formatVolt(nd.v)}` : '' })
   }
   return { results }
 })
@@ -259,47 +286,57 @@ async function copyResult() {
             <button class="btn danger sm row-del" :disabled="rows.length <= 1" @click="removeRow(i)">✕</button>
           </div>
           <div class="row-resistors">
-            <div v-for="(r, j) in row.resistors" :key="j" class="r-input">
-              <input
-                v-model="row.resistors[j]"
-                type="text"
-                inputmode="decimal"
-                class="field-input"
-                :class="{ invalid: parsedRows[i].invalid[j], target: isTarget(i, j) }"
-                :placeholder="isTarget(i, j) ? '?Ω' : '如 10k'"
-                autocomplete="off"
-                spellcheck="false"
-              />
+            <template v-for="(r, j) in row.resistors" :key="j">
+              <div class="r-input">
+                <input
+                  v-model="row.resistors[j]"
+                  type="text"
+                  inputmode="decimal"
+                  class="field-input"
+                  :class="{ invalid: parsedRows[i].invalid[j], target: isTarget(i, j) }"
+                  :placeholder="isTarget(i, j) ? '?Ω' : '如 10k'"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button
+                  v-if="mode === 'divider'"
+                  class="btn cyan sm r-calc"
+                  :class="{ on: isTarget(i, j) }"
+                  :title="isTarget(i, j) ? '取消待求' : '设为待求 Rx'"
+                  @click="setTarget(i, j)"
+                >{{ isTarget(i, j) ? '✓' : '算' }}</button>
+                <button v-if="row.resistors.length > 1" class="btn danger sm r-del" @click="removeResistor(row, j)">✕</button>
+              </div>
+              <!-- 行内节点：串联行电阻之间的电压点 ●（段边界） -->
               <button
-                v-if="mode === 'divider'"
-                class="btn cyan sm r-calc"
-                :class="{ on: isTarget(i, j) }"
-                :title="isTarget(i, j) ? '取消待求' : '设为待求 Rx'"
-                @click="setTarget(i, j)"
-              >{{ isTarget(i, j) ? '✓' : '算' }}</button>
-              <button v-if="row.resistors.length > 1" class="btn danger sm r-del" @click="removeResistor(row, j)">✕</button>
-            </div>
+                v-if="mode === 'divider' && row.mode === 'series' && j < row.resistors.length - 1"
+                class="node-btn inline"
+                :class="{ on: isPoint(segNodeAfterResistor(i, j)) }"
+                :title="isPoint(segNodeAfterResistor(i, j)) ? '取消电压点' : '在此设置电压点'"
+                @click="togglePoint(segNodeAfterResistor(i, j))"
+              >●</button>
+            </template>
             <button class="btn cyan sm r-add" @click="addResistor(row)">＋</button>
           </div>
         </div>
-        <!-- 节点槽：每行之后一个电压点 ●（分压模式，除最后一行；最后是 GND） -->
-        <div v-if="mode === 'divider'" class="node-slot" :class="{ gnd: i === rows.length - 1 }">
+        <!-- 行尾节点槽：每行段尾一个电压点 ●（分压模式；最后一段尾 = GND） -->
+        <div v-if="mode === 'divider'" class="node-slot" :class="{ gnd: segRows.rows[i].end >= segRows.total }">
           <button
-            v-if="i < rows.length - 1"
+            v-if="segRows.rows[i].end < segRows.total"
             class="node-btn"
-            :class="{ on: isPoint(i + 1) }"
-            :title="isPoint(i + 1) ? '取消电压点' : '在此设置电压点'"
-            @click="togglePoint(i + 1)"
+            :class="{ on: isPoint(segRows.rows[i].end) }"
+            :title="isPoint(segRows.rows[i].end) ? '取消电压点' : '在此设置电压点'"
+            @click="togglePoint(segRows.rows[i].end)"
           >●</button>
           <span v-else class="node-dot">●</span>
-          <span class="node-label">{{ i < rows.length - 1 ? `第 ${i + 1} 行之后` : 'GND' }}</span>
+          <span class="node-label">{{ segRows.rows[i].end < segRows.total ? `节点 ${segRows.rows[i].end}` : 'GND' }}</span>
           <input
-            v-if="i < rows.length - 1 && isPoint(i + 1)"
-            v-model="pointVals[i + 1]"
+            v-if="segRows.rows[i].end < segRows.total && isPoint(segRows.rows[i].end)"
+            v-model="pointVals[segRows.rows[i].end]"
             type="text"
             inputmode="decimal"
             class="field-input pt-v"
-            :class="{ invalid: pointVals[i + 1] && pointVals[i + 1].trim() !== '' && parseVolt(pointVals[i + 1]) === null }"
+            :class="{ invalid: pointVals[segRows.rows[i].end] && pointVals[segRows.rows[i].end].trim() !== '' && parseVolt(pointVals[segRows.rows[i].end]) === null }"
             placeholder="对地电压，如 3.3"
             autocomplete="off"
             spellcheck="false"
@@ -495,6 +532,13 @@ async function copyResult() {
   flex: 1;
   min-width: 100px;
   max-width: 180px;
+}
+/* 行内电阻之间的节点 ●（小号） */
+.node-btn.inline {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 /* 待求电阻输入框 + 「算」按钮 */

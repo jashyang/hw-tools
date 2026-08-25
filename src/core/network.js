@@ -121,18 +121,31 @@ export function solveUnknownResistor(rows, vcc, v, ref) {
   return { rx: x, rTotal: rTotal(x) }
 }
 
-// ── 多电压点反推：Vcc 可选，任意 ≥1 个电压点（含 Vcc 时）或 ≥2 个电压点（无 Vcc） ──
+// ── 多电压点反推（段粒度）：Vcc 可选，任意 ≥1 个电压点（含 Vcc 时）或 ≥2 个电压点（无 Vcc） ──
 // rows: [{mode, values:[Ω|null...]}]，恰好一个 null（待求 x）
+// 段模型：串联行的每个电阻 = 1 段；并联行整行 = 1 段（并联内部无中间节点）
 // vcc: 顶部电压（Ω 数值）或 null（未知，靠电压点反推）
-// points: [{index, v}]，index=节点位置（第 index 行之后，1..N-1），v=该点对地电压
-// 隐含 GND：节点 N 电压 0（最末端）
-// 返回 {rx, rTotal, vcc}（vcc 为反推值或原值）或 null
+// points: [{index, v}]，index=段边界位置（节点 index = 前 index 段之后，1..M-1；M=段总数；0=Vcc 顶端、M=GND）
+// 返回 {rx, rTotal, vcc, nodes} 或 null
 export function solveVoltagePoints(rows, vcc, points) {
   if (!rows || !rows.length || !points || !points.length) return null
-  // 电压点位置合法性：1..N-1
-  const N = rows.length
+
+  // ── 展平成段：串联行每电阻一段，并联行整行一段 ──
+  const segs = []
+  for (const row of rows) {
+    if (!row.values || !row.values.length) continue // 空行跳过
+    if (row.mode === 'parallel') {
+      segs.push({ kind: 'parallel', values: row.values })
+    } else {
+      for (const v of row.values) segs.push({ kind: 'series', values: [v] })
+    }
+  }
+  const M = segs.length
+  if (!M) return null
+
+  // 电压点位置合法性：1..M-1（0=Vcc 顶端、M=GND 无意义）
   const pts = points
-    .filter((p) => p && p.index >= 1 && p.index < N && p.v != null && isFinite(p.v) && p.v > 0)
+    .filter((p) => p && p.index >= 1 && p.index < M && p.v != null && isFinite(p.v) && p.v > 0)
     .map((p) => ({ index: p.index, v: p.v }))
     .sort((a, b) => a.index - b.index)
   if (!pts.length) return null
@@ -141,30 +154,26 @@ export function solveVoltagePoints(rows, vcc, points) {
     if (pts[i].index === pts[i - 1].index) return null
   }
 
-  // 每行等效值随 x 变化的函数（与 solveUnknownResistor 相同）
-  const fns = rows.map((row) => {
-    if (!row.values || row.values.length === 0) return () => 0 // 空行跳过（等效 0Ω）
-    const known = row.values.filter((val) => val != null && isFinite(val) && val > 0)
-    const hasX = row.values.some((val) => val == null)
+  // 每段等效值随 x 变化的函数
+  const fns = segs.map((seg) => {
+    const known = seg.values.filter((val) => val != null && isFinite(val) && val > 0)
+    const hasX = seg.values.some((val) => val == null)
     if (!hasX) {
-      const eq = rowEquiv(row.mode, known)
+      const eq = seg.kind === 'parallel' ? parallelSum(known) : known[0] || 0
       return isFinite(eq) ? () => eq : null
     }
-    if (known.length === 0) return (x) => x
-    if (row.mode === 'series') {
-      const base = known.reduce((a, b) => a + b, 0)
-      return (x) => base + x
-    }
+    if (seg.kind === 'series') return (x) => x // 单个未知电阻
+    // 并联含未知：1/R = 1/x + Σ(1/已知)
     const invKnown = known.reduce((a, b) => a + 1 / b, 0)
     return (x) => 1 / (invKnown + 1 / x)
   })
   if (fns.some((f) => f === null)) return null
-  if (!rows.some((row) => row.values.some((val) => val == null))) return null
+  if (!segs.some((seg) => seg.values.some((val) => val == null))) return null
 
   const rTotal = (x) => fns.reduce((a, f) => a + f(x), 0)
   const below = (x, k) => {
     let s = 0
-    for (let i = k; i < fns.length; i++) s += fns[i](x)
+    for (let i = k; i < M; i++) s += fns[i](x)
     return s
   }
 

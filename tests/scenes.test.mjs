@@ -100,9 +100,8 @@ check('solve: 全已知无未知 → null', solveUnknownResistor(
   12, 6, { type: 'node', index: 1 }
 ), null)
 
-// ── 多电压点反推（Vcc 可选） ──
-// 经典：Vcc=5 已知 + 1 电压点（第1行后=0.596V），行1=100k 待求行2 → x=13.533k
-// 节点1 电压 = Vcc×Rx/(100k+Rx) = 0.596 → Rx = 13.533k
+// ── 多电压点反推（段粒度：串联行每电阻=1段，并联行整行=1段） ──
+// 经典：Vcc=5 已知 + 1 电压点（段1后=0.596V），行1=100k 待求行2 → x=13.533k
 {
   const s = solveVoltagePoints(
     [{ mode: 'series', values: [100000] }, { mode: 'series', values: [null] }],
@@ -111,18 +110,42 @@ check('solve: 全已知无未知 → null', solveUnknownResistor(
   approx('vpts: Vcc+1点 经典分压 → x=13.533k', s.rx, 13533.151680289553)
   approx('vpts: 反推 vcc 保留原值', s.vcc, 5)
 }
-// 无 Vcc：3 行网络（100k | 待求x | 1k），节点1=4V、节点2=0.596V
-// v1/v2 = (x+1k)/1k = 4/0.596 → x = 5711
+// 行内电阻之间：行1串联[100k,47k]，行2待求 → 段=[100k,47k,x]
+// 节点2（47k后）below=x → 5x/(147k+x)=0.596 → x=19893.7
 {
   const s = solveVoltagePoints(
-    [{ mode: 'series', values: [100000] }, { mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
-    null, [{ index: 1, v: 4 }, { index: 2, v: 0.596 }]
+    [{ mode: 'series', values: [100000, 47000] }, { mode: 'series', values: [null] }],
+    5, [{ index: 2, v: 0.596 }]
   )
-  approx('vpts: 无Vcc 2点 → x=5711', s.rx, 5711.409395973154)
-  approx('vpts: 无Vcc 反推 vcc>0', s.vcc > 0, true)
+  approx('vpts: 行内电阻之间节点2 → x=19893.7', s.rx, 19893.732970030396)
 }
-// 多电压点校验：Vcc=12 已知 + 2 点（节点1=8V、节点2=4V），行1=1k 待求行2 行3=1k
-// 节点2 = 12×1k/(1k+x+1k) = 4 → x = 1k
+// 节点1（100k与47k之间）below=47k+x：5(47k+x)/(147k+x)=2 → x=19666.7
+{
+  const s = solveVoltagePoints(
+    [{ mode: 'series', values: [100000, 47000] }, { mode: 'series', values: [null] }],
+    5, [{ index: 1, v: 2 }]
+  )
+  approx('vpts: 行内节点1 → x=19666.7', s.rx, 19666.666666668785)
+}
+// 无 Vcc：3 段（100k,47k,x），节点1=2V、节点2=0.596V → (47k+x)/x = 2/0.596 → x≈19951.6
+{
+  const s = solveVoltagePoints(
+    [{ mode: 'series', values: [100000, 47000] }, { mode: 'series', values: [null] }],
+    null, [{ index: 1, v: 2 }, { index: 2, v: 0.596 }]
+  )
+  approx('vpts: 无Vcc 行内2点 → x=19951.6', s.rx, 19951.566951571374)
+  approx('vpts: 无Vcc 反推 vcc=4.99', s.vcc, 4.987234042552994)
+}
+// 并联行=1段：行1并联[1k,2k]等效666.7，行2待求，节点1（组后）below=x → 12x/(666.7+x)=6 → x=666.7
+{
+  const s = solveVoltagePoints(
+    [{ mode: 'parallel', values: [1000, 2000] }, { mode: 'series', values: [null] }],
+    12, [{ index: 1, v: 6 }]
+  )
+  approx('vpts: 并联行=1段 → x=666.7', s.rx, 2000 / 3)
+}
+// 多电压点校验：Vcc=12 + 2 点（段1后=8V、段2后=4V），行1=1k 待求行2 行3=1k
+// 段=[1k,x,1k]：节点2 below=1k → 12×1k/(1k+x+1k)=4 → x=1k
 {
   const s = solveVoltagePoints(
     [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
@@ -130,7 +153,7 @@ check('solve: 全已知无未知 → null', solveUnknownResistor(
   )
   approx('vpts: Vcc+2点校验 → x=1k', s.rx, 1000)
 }
-// 矛盾输入 → null：两个点电压不满足同一网络（节点2 应=4V 却给 6V）
+// 矛盾输入 → null
 check('vpts: 矛盾输入 → null', solveVoltagePoints(
   [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
   12, [{ index: 1, v: 8 }, { index: 2, v: 6 }]
