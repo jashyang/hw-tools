@@ -1,14 +1,14 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import PinLock from './components/PinLock.vue'
-import EquivView from './views/EquivView.vue'
-import SolveView from './views/SolveView.vue'
+import SceneView from './views/SceneView.vue'
+import { scenes } from './core/scenes.js'
 
 const UNLOCK_KEY = 'hw-tools-unlock-until'
 const UNLOCK_TTL = 24 * 3600 * 1000 // 24 小时
 
 const unlocked = ref(false)
-const tab = ref('equiv')
+const currentScene = ref(null)
 
 // 初始化：读取 localStorage 解锁时间戳
 const saved = Number(localStorage.getItem(UNLOCK_KEY) || 0)
@@ -22,17 +22,35 @@ function onUnlock() {
 
 <template>
   <PinLock v-if="!unlocked" @unlock="onUnlock" />
+
   <div v-else class="app-shell">
-    <div class="topbar">
-      <div class="logo"><span class="chip"></span>HW-TOOLS</div>
-      <div class="tab-nav">
-        <button class="tab" :class="{ active: tab === 'equiv' }" @click="tab = 'equiv'">等效电阻</button>
-        <button class="tab" :class="{ active: tab === 'solve' }" @click="tab = 'solve'">电压反推</button>
+    <!-- 场景页 -->
+    <SceneView
+      v-if="currentScene"
+      :key="currentScene.id"
+      :scene="currentScene"
+      @back="currentScene = null"
+    />
+
+    <!-- 首页：场景卡片 -->
+    <template v-else>
+      <div class="topbar">
+        <div class="logo"><span class="chip"></span>HW-TOOLS</div>
+        <div class="tag">CIRCUIT CALC</div>
       </div>
-    </div>
-    <transition name="fade" mode="out-in">
-      <EquivView v-if="tab === 'equiv'" key="equiv" />
-      <SolveView v-else key="solve" />
-    </transition>
+      <div class="section-title">选择场景</div>
+      <div class="scene-grid">
+        <button
+          v-for="s in scenes"
+          :key="s.id"
+          class="scene-card"
+          @click="currentScene = s"
+        >
+          <span class="card-icon">{{ s.icon }}</span>
+          <span class="card-name">{{ s.name }}</span>
+          <span class="card-desc">{{ s.desc }}</span>
+        </button>
+      </div>
+    </template>
   </div>
 </template>
