@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 
 const props = defineProps({
   scene: { type: Object, required: true },
@@ -44,8 +44,12 @@ const listParsed = computed(() => {
 const listInvalid = computed(() => listParsed.value.map((v, i) => listRows[i].trim() !== '' && v === null))
 const listValidRows = computed(() => listParsed.value.filter((v) => v !== null))
 
-// ── 求解 ──
-const result = computed(() => {
+// ── 求解（手动触发，避免每敲一个字符就重算） ──
+const result = ref(null)
+function compute() {
+  result.value = buildResult()
+}
+function buildResult() {
   const scene = props.scene
   if (isList.value) {
     if (listValidRows.value.length === 0) return null
@@ -68,7 +72,10 @@ const result = computed(() => {
   if (empties.length === 0) return { error: '留空一个待求量' }
   if (empties.length > 1) return { error: `留空了 ${empties.length} 个，只留一个待求量即可` }
   return scene.solve({ values, emptyKeys: empties })
-})
+}
+
+// 输入变化 → 结果失效
+watch([inputs, listRows], () => { result.value = null }, { deep: true })
 
 // ── 复制结果 ──
 const copied = ref(false)
@@ -136,6 +143,9 @@ function removeRow(i) { if (listRows.length > 1) listRows.splice(i, 1) }
       </div>
       <button class="btn cyan sm list-add" @click="addRow">+ 加一个电阻</button>
     </div>
+
+    <!-- 计算按钮 -->
+    <button class="btn cyan compute-btn" @click="compute">⚡ 计算</button>
 
     <!-- 结果 -->
     <div v-if="result" class="result-panel">

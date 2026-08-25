@@ -132,7 +132,14 @@ const nodeLabel = (idx) => {
   return `节点 ${idx}（第 ${idx} 段之后）`
 }
 
-const result = computed(() => {
+// 输入/模式变化 → 旧结果失效（点击「⚡ 计算」才会重新计算）
+watch([rows, vcc, pointVals, target, mode], () => { result.value = null }, { deep: true })
+
+const result = ref(null)
+function compute() {
+  result.value = buildResult()
+}
+function buildResult() {
   if (mode.value === 'equiv') {
     if (!validRows.value.length) return null
     if (validRows.value.some((r) => r.invalid)) return { error: '有电阻值格式不对，示例：1k / 2.2k / 470' }
@@ -201,7 +208,7 @@ const result = computed(() => {
     results.push({ label: `电压点${nodeLabel(p.index)}`, value: formatVolt(p.v), note: nd ? `回代 ${formatVolt(nd.v)}` : '' })
   }
   return { results }
-})
+}
 
 // ── 行操作 ──
 function addRow() { rows.push(newRow()) }
@@ -276,7 +283,10 @@ async function copyResult() {
 
     <!-- 多行网络 -->
     <div class="network">
-      <div class="section-title">电阻网络（行内合并 → 行间串联）</div>
+      <div class="section-title">
+        <span>电阻网络（行内合并 → 行间串联）</span>
+        <button class="btn cyan compute-btn title-btn" @click="compute">⚡ 计算</button>
+      </div>
       <template v-for="(row, i) in rows" :key="row.id">
         <div class="net-row">
           <div class="row-head">
@@ -427,6 +437,8 @@ async function copyResult() {
   flex-direction: column;
   gap: 8px;
 }
+.network .section-title { justify-content: space-between; }
+.title-btn { margin-left: auto; flex-shrink: 0; }
 .net-row {
   background: rgba(15, 21, 31, 0.6);
   border: 1px solid var(--border);

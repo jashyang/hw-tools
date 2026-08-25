@@ -23,9 +23,19 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-html, body {
+html {
   height: 100%;
   background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+/* body 背景必须透明：否则不透明背景会盖住所有负 z-index 的背景层
+   （body::before/::after 与 .circuit-bg 的 z-index:-1 都被 body 自身背景遮住，走线/网格全不可见） */
+body {
+  min-height: 100%;
+  background: transparent;
   color: var(--text);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
@@ -143,6 +153,14 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   content: '▸';
   color: var(--neon);
 }
+/* 计算按钮（表单填完手动触发，避免每敲一个字符就重算） */
+.compute-btn {
+  align-self: flex-start;
+  font-size: 14px;
+  padding: 10px 30px;
+  letter-spacing: 2px;
+}
+.compute-btn + .compute-btn { margin-left: 10px; }
 
 /* ── 滚动条 ── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
