@@ -459,6 +459,25 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   padding: 3px 9px;
   cursor: pointer;
 }
+/* 退出登录按钮（终端风格，hover 警示） */
+.logout-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.logout-btn:hover {
+  color: var(--red);
+  border-color: rgba(255, 59, 48, 0.5);
+  box-shadow: 0 0 6px rgba(255, 59, 48, 0.25);
+}
 .nav-mask {
   display: none;
 }

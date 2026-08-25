@@ -21,6 +21,12 @@ function onUnlock() {
   localStorage.setItem(UNLOCK_KEY, String(Date.now() + UNLOCK_TTL))
 }
 
+// 退出登录：清除解锁状态，回到 PIN 门禁页
+function logout() {
+  localStorage.removeItem(UNLOCK_KEY)
+  unlocked.value = false
+}
+
 function selectScene(id) {
   currentId.value = id
   navOpen.value = false
@@ -69,6 +75,7 @@ const currentCatName = computed(() => {
         <button class="hamburger" @click="navOpen = !navOpen">☰</button>
         <span class="term-path">~/{{ currentCatName }}/{{ sceneById[currentId].name }}</span>
         <span class="term-status"><i class="dot"></i> AUTH OK</span>
+        <button class="logout-btn" title="退出登录" @click="logout">⏻ 退出</button>
       </header>
       <SceneView :key="currentId" :scene="sceneById[currentId]" />
     </main>
