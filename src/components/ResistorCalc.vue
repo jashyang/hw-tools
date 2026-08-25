@@ -38,8 +38,9 @@ const validRows = computed(() => {
   return out
 })
 
+// 行小计：直接接收原始行（resistors 为字符串数组），内部解析
 const rowTotal = (row) => {
-  const resistors = row.values.filter((v) => v != null)
+  const resistors = row.resistors.map((r) => parseResistor(r)).filter((v) => v != null)
   if (!resistors.length) return null
   const eq = rowEquiv(row.mode, resistors)
   return isFinite(eq) ? eq : null
