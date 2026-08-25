@@ -280,3 +280,21 @@ export const rc = {
 
 // ── 场景注册表 ──
 export const scenes = [ohm, led, divider, parallel, power, rc]
+
+// ── 分类结构（大类 → 小类） ──
+export const CATEGORIES = [
+  {
+    id: 'resistor',
+    name: '电阻计算',
+    icon: '⚡',
+    items: ['ohm', 'led', 'divider', 'parallel', 'power'],
+  },
+  {
+    id: 'cap',
+    name: '电容与时间',
+    icon: '⏱',
+    items: ['rc'],
+  },
+]
+
+export const sceneById = Object.fromEntries(scenes.map((s) => [s.id, s]))

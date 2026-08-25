@@ -4,19 +4,16 @@ import CalcForm from '../components/CalcForm.vue'
 defineProps({
   scene: { type: Object, required: true },
 })
-defineEmits(['back'])
 </script>
 
 <template>
   <div class="scene-view">
-    <div class="topbar">
-      <button class="btn back-btn" @click="$emit('back')">‹ 返回</button>
-      <div class="scene-title">
-        <span class="scene-icon">{{ scene.icon }}</span>
-        <span class="scene-name">{{ scene.name }}</span>
-      </div>
+    <div class="scene-head">
+      <span class="scene-icon">{{ scene.icon }}</span>
+      <span class="scene-name">{{ scene.name }}</span>
+      <span class="scene-desc">{{ scene.desc }}</span>
     </div>
-    <div class="formula-bar">{{ scene.formula }}</div>
+    <div class="formula-bar"><span class="prompt">$</span> {{ scene.formula }}</div>
     <div class="panel calc-panel">
       <div class="section-title">输入参数</div>
       <CalcForm :scene="scene" />
@@ -30,33 +27,41 @@ defineEmits(['back'])
   flex-direction: column;
   gap: 12px;
 }
-.topbar {
+.scene-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
-.back-btn { font-size: 13px; padding: 7px 12px; }
-.scene-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.scene-icon { font-size: 20px; }
+.scene-name {
   font-family: var(--mono);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--neon);
   letter-spacing: 1px;
+  text-shadow: var(--glow-green);
 }
-.scene-icon { font-size: 18px; }
+.scene-desc {
+  font-size: 12px;
+  color: var(--dim);
+}
 .formula-bar {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--cyan);
-  background: rgba(0, 229, 255, 0.05);
+  background: var(--bg-deep);
   border: 1px solid var(--cyan-dim);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 9px 14px;
   letter-spacing: 0.5px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.formula-bar .prompt {
+  color: var(--neon);
+  font-weight: 700;
 }
 .calc-panel { display: flex; flex-direction: column; gap: 10px; }
 </style>
