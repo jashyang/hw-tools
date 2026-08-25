@@ -1,5 +1,9 @@
-// 场景求解逻辑单测（node 直跑，无 vue 依赖）
+// 场景求解逻辑 + 串并联网络计算单测（node 直跑，无 vue 依赖）
 import { scenes } from '/home/hermes/projects/hw-tools/src/core/scenes.js'
+import {
+  rowEquiv, networkEquiv, dividerRx,
+  seriesSum, parallelSum,
+} from '/home/hermes/projects/hw-tools/src/core/network.js'
 
 const byId = Object.fromEntries(scenes.map((s) => [s.id, s]))
 let pass = 0, fail = 0
@@ -9,54 +13,41 @@ function check(name, got, want) {
   if (g === w) { pass++; console.log(`  ✓ ${name}`) }
   else { fail++; console.log(`  ✗ ${name}\n     got  ${g}\n     want ${w}`) }
 }
-
-// 1. 欧姆定律
-{
-  const s = byId.ohm
-  const r = s.solve({ values: { v: 5, i: 0.02, r: null }, emptyKeys: ['r'] })
-  check('ohm: v=5 i=20mA → r', r.results[0].value, '250Ω')
-  const v = s.solve({ values: { v: null, i: 0.02, r: 1000 }, emptyKeys: ['v'] })
-  check('ohm: i=20mA r=1k → v', v.results[0].value, '20V')
-  const i = s.solve({ values: { v: 5, i: null, r: 1000 }, emptyKeys: ['i'] })
-  check('ohm: v=5 r=1k → i', i.results[0].value, '5mA')
-  check('ohm: 全填 → error', s.solve({ values: { v: 5, i: 0.02, r: 250 }, emptyKeys: [] }).error, '留空一个待求量')
+function approx(name, got, want) {
+  if (Math.abs(got - want) < 1e-9) { pass++; console.log(`  ✓ ${name}`) }
+  else { fail++; console.log(`  ✗ ${name}\n     got  ${got}\n     want ${want}`) }
 }
 
-// 2. LED 限流
-{
-  const s = byId.led
-  const r = s.solve({ values: { vcc: 5, vf: 2, i: 0.02, r: null }, emptyKeys: ['r'] })
-  check('led: 5V-2V-20mA → r', r.results[0].value, '150Ω')
-  check('led: 功率建议', r.results[1].value, '60mW')
-  const i = s.solve({ values: { vcc: 5, vf: 2, i: null, r: 150 }, emptyKeys: ['i'] })
-  check('led: 反求电流', i.results[0].value, '20mA')
-  const err = s.solve({ values: { vcc: 2, vf: 3, i: 0.02, r: null }, emptyKeys: ['r'] })
-  check('led: vcc<vf → error', err.error, '电源电压需高于 LED 压降')
-}
+// ── 串并联网络 ──
+approx('series: 1k+1k', seriesSum([1000, 1000]), 2000)
+approx('parallel: 1k||1k', parallelSum([1000, 1000]), 500)
+approx('parallel: 1k||1k||1k', parallelSum([1000, 1000, 1000]), 1000 / 3)
+approx('row: series 1k+2.2k', rowEquiv('series', [1000, 2200]), 3200)
+approx('row: parallel 1k||2.2k', rowEquiv('parallel', [1000, 2200]), 1 / (1 / 1000 + 1 / 2200))
+check('row: 空列表 → NaN', isNaN(rowEquiv('series', [])), true)
+check('row: 非法值过滤', rowEquiv('series', [null, 1000]), 1000)
+// 行间串联：行1 串联 1k+1k=2k，行2 并联 1k||1k=500 → 总 2500
+approx('network: 串行(1k+1k)+并行(1k||1k)', networkEquiv([
+  { mode: 'series', resistors: [1000, 1000] },
+  { mode: 'parallel', resistors: [1000, 1000] },
+]), 2500)
+// 三行混合
+approx('network: 三行混合', networkEquiv([
+  { mode: 'series', resistors: [1000] },
+  { mode: 'parallel', resistors: [1000, 1000] },
+  { mode: 'series', resistors: [470, 470] },
+]), 1000 + 500 + 940)
+check('network: 空行忽略', isNaN(networkEquiv([
+  { mode: 'series', resistors: [] },
+  { mode: 'series', resistors: [1000] },
+])), false)
+// 分压 Rx
+approx('divider: R_net=2k Vcc=12 Vout=6 → Rx=2k', dividerRx(2000, 12, 6), 2000)
+approx('divider: R_net=10k Vcc=5 Vout=3.3', dividerRx(10000, 5, 3.3), 10000 * 3.3 / 1.7)
+check('divider: Vout>=Vcc → null', dividerRx(1000, 5, 5), null)
+check('divider: Vout=0 → null', dividerRx(1000, 5, 0), null)
 
-// 3. 分压
-{
-  const s = byId.divider
-  const vo = s.solve({ values: { vcc: 12, r1: 10000, r2: 10000, vout: null }, emptyKeys: ['vout'] })
-  check('divider: 12V 10k/10k → vout', vo.results[0].value, '6V')
-  check('divider: 分压比', vo.results[1].value, '50.0%')
-  const r1 = s.solve({ values: { vcc: 12, r1: null, r2: 10000, vout: 6 }, emptyKeys: ['r1'] })
-  check('divider: 反求 R1', r1.results[0].value, '10kΩ')
-  const r2 = s.solve({ values: { vcc: 12, r1: 10000, r2: null, vout: 6 }, emptyKeys: ['r2'] })
-  check('divider: 反求 R2', r2.results[0].value, '10kΩ')
-}
-
-// 4. 串并联等效
-{
-  const s = byId.parallel
-  const res = s.solve({ values: { resistors: [1000, 1000] } })
-  check('parallel: 1k||1k 串联', res.results[0].value, '2kΩ')
-  check('parallel: 1k||1k 并联', res.results[1].value, '500Ω')
-  const single = s.solve({ values: { resistors: [4700] } })
-  check('parallel: 单个电阻', single.results[0].value, '4.7kΩ')
-}
-
-// 5. 功率
+// ── 功率计算 ──
 {
   const s = byId.power
   const a = s.solve({ values: { p: null, v: 12, i: 0.5, r: null } })
@@ -68,7 +59,7 @@ function check(name, got, want) {
   check('power: 只填1个 → error', s.solve({ values: { p: null, v: 12, i: null, r: null } }).error, '请填写任意两个已知量')
 }
 
-// 6. RC
+// ── RC 时间常数 ──
 {
   const s = byId.rc
   const t = s.solve({ values: { r: 10000, c: 100e-6, t: null }, emptyKeys: ['t'] })
@@ -78,12 +69,8 @@ function check(name, got, want) {
   check('rc: 反求 R', r.results[0].value, '10kΩ')
 }
 
-// 解析函数抽查（浮点用近似比较）
+// ── 解析函数抽查 ──
 import { parseResistor, parseVolt, parseAmp, parseCap, parseSec, formatCap, formatSec } from '/home/hermes/projects/hw-tools/src/core/parse.js'
-function approx(name, got, want) {
-  if (Math.abs(got - want) < 1e-9) { pass++; console.log(`  ✓ ${name}`) }
-  else { fail++; console.log(`  ✗ ${name}\n     got  ${got}\n     want ${want}`) }
-}
 approx('parse: 1M5', parseResistor('1M5'), 1500000)
 approx('parse: 4k7', parseResistor('4k7'), 4700)
 approx('parse: 2.2k', parseResistor('2.2k'), 2200)

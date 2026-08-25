@@ -8,173 +8,21 @@ import {
   formatWatt,
 } from './parse.js'
 
-// 求解函数约定：接收 { values: {key→数值|null}, emptyKeys: [key...] }
-// 返回 null（无法求解）| { error: '提示' } | { results: [{label, value, note?}] }
-
 function val(values, key) {
   return values[key] ?? null
 }
 
-// ── 1. 欧姆定律 ──
-export const ohm = {
-  id: 'ohm',
-  name: '欧姆定律',
+// ── 1. 电阻计算（等效电阻 / 分压电阻，自定义组件渲染） ──
+export const resistor = {
+  id: 'resistor',
+  name: '电阻计算',
   icon: '⚡',
-  desc: 'V = I × R，知二求一',
-  formula: 'V = I × R',
-  fields: [
-    { key: 'v', label: '电压', unit: 'V', parse: parseVolt, fmt: formatVolt, ph: '如 5 或 5V' },
-    { key: 'i', label: '电流', unit: 'A', parse: parseAmp, fmt: formatAmp, ph: '如 20mA' },
-    { key: 'r', label: '电阻', unit: 'Ω', parse: parseResistor, fmt: formatOhms, ph: '如 1k' },
-  ],
-  solve({ values, emptyKeys }) {
-    const v = val(values, 'v'), i = val(values, 'i'), r = val(values, 'r')
-    if (emptyKeys.length === 1) {
-      if (emptyKeys[0] === 'v' && i != null && r != null) return { results: [{ label: '电压', value: formatVolt(i * r) }] }
-      if (emptyKeys[0] === 'i' && v != null && r != null) {
-        if (r === 0) return { error: '电阻不能为 0' }
-        return { results: [{ label: '电流', value: formatAmp(v / r) }] }
-      }
-      if (emptyKeys[0] === 'r' && v != null && i != null) {
-        if (i === 0) return { error: '电流不能为 0' }
-        return { results: [{ label: '电阻', value: formatOhms(v / i) }] }
-      }
-    }
-    return emptyKeys.length === 0 ? { error: '留空一个待求量' } : null
-  },
+  desc: '多行串并联网络：等效电阻 / 分压电阻',
+  formula: '行内合并 → 行间串联',
+  component: 'resistor', // SceneView 按此渲染 ResistorCalc
 }
 
-// ── 2. LED 限流电阻 ──
-export const led = {
-  id: 'led',
-  name: 'LED 限流电阻',
-  icon: '💡',
-  desc: 'R = (Vcc − Vf) / I，附功率建议',
-  formula: 'R = (Vcc − Vf) / I',
-  fields: [
-    { key: 'vcc', label: '电源电压', unit: 'V', parse: parseVolt, fmt: formatVolt, ph: '如 5' },
-    { key: 'vf', label: 'LED 压降', unit: 'V', parse: parseVolt, fmt: formatVolt, ph: '红2.0 绿3.2 白3.3' },
-    { key: 'i', label: '目标电流', unit: 'A', parse: parseAmp, fmt: formatAmp, ph: '如 20mA' },
-    { key: 'r', label: '限流电阻', unit: 'Ω', parse: parseResistor, fmt: formatOhms, ph: '如 150' },
-  ],
-  solve({ values, emptyKeys }) {
-    const vcc = val(values, 'vcc'), vf = val(values, 'vf'), i = val(values, 'i'), r = val(values, 'r')
-    if (emptyKeys.length !== 1) return emptyKeys.length === 0 ? { error: '留空一个待求量' } : null
-    const k = emptyKeys[0]
-    if (k === 'r') {
-      if (vcc == null || vf == null || i == null) return null
-      if (vcc <= vf) return { error: '电源电压需高于 LED 压降' }
-      const R = (vcc - vf) / i
-      const P = i * i * R
-      return {
-        results: [
-          { label: '限流电阻', value: formatOhms(R) },
-          { label: '耗散功率', value: formatWatt(P), note: '选 ≥ 2× 功率档位（如 1/4W）' },
-        ],
-      }
-    }
-    if (k === 'i') {
-      if (vcc == null || vf == null || r == null) return null
-      if (vcc <= vf) return { error: '电源电压需高于 LED 压降' }
-      const I = (vcc - vf) / r
-      return { results: [{ label: '实际电流', value: formatAmp(I), note: '建议 10~20mA 常规亮度' }] }
-    }
-    if (k === 'vf') {
-      if (vcc == null || i == null || r == null) return null
-      return { results: [{ label: 'LED 压降', value: formatVolt(vcc - i * r) }] }
-    }
-    if (k === 'vcc') {
-      if (vf == null || i == null || r == null) return null
-      return { results: [{ label: '电源电压', value: formatVolt(vf + i * r) }] }
-    }
-    return null
-  },
-}
-
-// ── 3. 分压电路 ──
-export const divider = {
-  id: 'divider',
-  name: '分压电路',
-  icon: '📉',
-  desc: 'Vout = Vcc × R2 / (R1 + R2)，可反求元件',
-  formula: 'Vout = Vcc × R2 / (R1 + R2)',
-  fields: [
-    { key: 'vcc', label: '电源电压', unit: 'V', parse: parseVolt, fmt: formatVolt, ph: '如 12' },
-    { key: 'r1', label: '上电阻 R1', unit: 'Ω', parse: parseResistor, fmt: formatOhms, ph: '如 10k' },
-    { key: 'r2', label: '下电阻 R2', unit: 'Ω', parse: parseResistor, fmt: formatOhms, ph: '如 10k' },
-    { key: 'vout', label: '输出电压', unit: 'V', parse: parseVolt, fmt: formatVolt, ph: '如 6' },
-  ],
-  solve({ values, emptyKeys }) {
-    const vcc = val(values, 'vcc'), r1 = val(values, 'r1'), r2 = val(values, 'r2'), vout = val(values, 'vout')
-    if (emptyKeys.length !== 1) return emptyKeys.length === 0 ? { error: '留空一个待求量' } : null
-    const k = emptyKeys[0]
-    const ratio = (vo, vc) => (vc > 0 ? `${(vo / vc * 100).toFixed(1)}%` : '—')
-    if (k === 'vout') {
-      if (vcc == null || r1 == null || r2 == null) return null
-      const Vo = vcc * r2 / (r1 + r2)
-      return {
-        results: [
-          { label: '输出电压', value: formatVolt(Vo) },
-          { label: '分压比', value: ratio(Vo, vcc) },
-        ],
-      }
-    }
-    if (k === 'r1') {
-      if (vcc == null || r2 == null || vout == null) return null
-      if (vout === 0) return { error: '输出电压不能为 0' }
-      const R1 = r2 * (vcc - vout) / vout
-      if (R1 <= 0) return { error: 'Vout 需小于 Vcc 才有解' }
-      return { results: [{ label: '上电阻 R1', value: formatOhms(R1) }] }
-    }
-    if (k === 'r2') {
-      if (vcc == null || r1 == null || vout == null) return null
-      if (vcc <= vout) return { error: 'Vout 需小于 Vcc 才有解' }
-      const R2 = r1 * vout / (vcc - vout)
-      return { results: [{ label: '下电阻 R2', value: formatOhms(R2) }] }
-    }
-    if (k === 'vcc') {
-      if (r1 == null || r2 == null || vout == null) return null
-      const Vc = vout * (r1 + r2) / r2
-      return {
-        results: [
-          { label: '电源电压', value: formatVolt(Vc) },
-          { label: '分压比', value: ratio(vout, Vc) },
-        ],
-      }
-    }
-    return null
-  },
-}
-
-// ── 4. 串并联等效 ──
-export const parallel = {
-  id: 'parallel',
-  name: '串并联等效',
-  icon: '🔀',
-  desc: '多个电阻合并：串联相加，并联倒数相加',
-  formula: 'Rs = ΣR，Rp = 1 / Σ(1/R)',
-  mode: 'list', // 特殊：电阻列表，全填求两结果
-  listField: { key: 'resistors', label: '电阻值', parse: parseResistor, fmt: formatOhms, ph: '如 10k' },
-  solve({ values }) {
-    const list = values.resistors || []
-    if (list.length < 1) return null
-    if (list.length === 1) return { results: [{ label: '等效电阻', value: formatOhms(list[0]) }] }
-    const Rs = list.reduce((a, b) => a + b, 0)
-    let Rp = 0
-    for (const r of list) {
-      if (r === 0) return { error: '电阻不能为 0' }
-      Rp += 1 / r
-    }
-    return {
-      results: [
-        { label: '串联等效', value: formatOhms(Rs), note: 'n 个串联直接相加' },
-        { label: '并联等效', value: formatOhms(1 / Rp), note: 'n 个并联小于最小阻值' },
-      ],
-    }
-  },
-}
-
-// ── 5. 功率计算 ──
+// ── 2. 功率计算 ──
 export const power = {
   id: 'power',
   name: '功率计算',
@@ -238,7 +86,7 @@ function parseQuantityWatt(s) {
   return isFinite(v) && v > 0 ? v : null
 }
 
-// ── 6. RC 时间常数 ──
+// ── 3. RC 时间常数 ──
 export const rc = {
   id: 'rc',
   name: 'RC 时间常数',
@@ -279,7 +127,7 @@ export const rc = {
 }
 
 // ── 场景注册表 ──
-export const scenes = [ohm, led, divider, parallel, power, rc]
+export const scenes = [resistor, power, rc]
 
 // ── 分类结构（大类 → 小类） ──
 export const CATEGORIES = [
@@ -287,7 +135,7 @@ export const CATEGORIES = [
     id: 'resistor',
     name: '电阻计算',
     icon: '⚡',
-    items: ['ohm', 'led', 'divider', 'parallel', 'power'],
+    items: ['resistor', 'power'],
   },
   {
     id: 'cap',

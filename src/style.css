@@ -474,3 +474,59 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   animation: scanline 6s linear infinite;
   pointer-events: none;
 }
+
+/* ══════ 结果面板（全局，CalcForm/ResistorCalc 共用）══════ */
+.result-panel {
+  margin-top: 4px;
+  border: 1px solid var(--neon-dim);
+  background: rgba(0, 255, 159, 0.04);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: power-in 0.5s ease;
+}
+.result-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.result-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 1px;
+  min-width: 72px;
+}
+.result-value { font-size: 22px; font-weight: 700; }
+.result-note {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--amber);
+  width: 100%;
+}
+.result-error {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--red);
+  text-align: center;
+  padding: 4px 0;
+}
+.copy-btn { align-self: flex-end; }
+
+/* 通电脉冲：结果出现瞬间 LED 点亮效果 */
+@keyframes power-in {
+  0% {
+    border-color: var(--neon);
+    box-shadow: 0 0 32px rgba(0, 255, 159, 0.45);
+    transform: scale(0.985);
+  }
+  55% { box-shadow: 0 0 16px rgba(0, 255, 159, 0.22); }
+  100% {
+    border-color: var(--neon-dim);
+    box-shadow: 0 0 8px rgba(0, 255, 159, 0.1);
+    transform: scale(1);
+  }
+}

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import PinLock from './components/PinLock.vue'
+import CircuitBg from './components/CircuitBg.vue'
 import SceneView from './views/SceneView.vue'
 import { CATEGORIES, sceneById } from './core/scenes.js'
 
@@ -34,7 +35,9 @@ const currentCatName = computed(() => {
 <template>
   <PinLock v-if="!unlocked" @unlock="onUnlock" />
 
-  <div v-else class="layout">
+  <template v-else>
+    <CircuitBg />
+    <div class="layout">
     <!-- 移动端遮罩 -->
     <div v-if="navOpen" class="nav-mask" @click="navOpen = false"></div>
 
@@ -69,5 +72,6 @@ const currentCatName = computed(() => {
       </header>
       <SceneView :key="currentId" :scene="sceneById[currentId]" />
     </main>
-  </div>
+    </div>
+  </template>
 </template>

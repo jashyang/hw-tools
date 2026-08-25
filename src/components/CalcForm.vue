@@ -182,32 +182,4 @@ function removeRow(i) { if (listRows.length > 1) listRows.splice(i, 1) }
 .list-row .field-input { flex: 1; }
 .list-del { flex-shrink: 0; width: 32px; }
 .list-add { align-self: flex-start; }
-
-.result-panel {
-  margin-top: 4px;
-  border: 1px solid var(--neon-dim);
-  background: rgba(0, 255, 159, 0.04);
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  animation: fade-in 0.25s;
-}
-.result-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.result-label { font-family: var(--mono); font-size: 12px; color: var(--dim); letter-spacing: 1px; min-width: 72px; }
-.result-value { font-size: 22px; font-weight: 700; }
-.result-note { font-family: var(--sans); font-size: 11px; color: var(--amber); width: 100%; }
-.result-error { font-family: var(--mono); font-size: 13px; color: var(--red); text-align: center; padding: 4px 0; }
-.copy-btn { align-self: flex-end; }
-
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 </style>

@@ -1,5 +1,6 @@
 <script setup>
 import CalcForm from '../components/CalcForm.vue'
+import ResistorCalc from '../components/ResistorCalc.vue'
 
 defineProps({
   scene: { type: Object, required: true },
@@ -16,7 +17,9 @@ defineProps({
     <div class="formula-bar"><span class="prompt">$</span> {{ scene.formula }}</div>
     <div class="panel calc-panel">
       <div class="section-title">输入参数</div>
-      <CalcForm :scene="scene" />
+      <!-- 自定义组件（如电阻计算）优先，其余走通用表单 -->
+      <ResistorCalc v-if="scene.component === 'resistor'" />
+      <CalcForm v-else :scene="scene" />
     </div>
   </div>
 </template>
