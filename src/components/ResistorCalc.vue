@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { parseResistor, formatOhms, formatVolt, formatAmp } from '../core/parse.js'
+import { parseResistor, formatOhms, formatVolt, formatAmp, parseVolt } from '../core/parse.js'
 import { rowEquiv, networkEquiv, solveUnknownResistor } from '../core/network.js'
 
 // ── 模式：等效电阻 / 分压电阻 ──
