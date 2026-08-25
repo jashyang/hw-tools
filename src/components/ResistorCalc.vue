@@ -89,8 +89,8 @@ const pointsIndexOk = computed(() => {
   return true
 })
 
-// 某节点是否已设电压点
-const isPoint = (idx) => Object.prototype.hasOwnProperty.call(pointVals, idx)
+// 某节点是否已设电压点（访问响应式属性，确保 Vue 追踪依赖）
+const isPoint = (idx) => pointVals[idx] !== undefined
 // 切换某节点为电压点（再次点击清除）
 function togglePoint(idx) {
   if (isPoint(idx)) {
