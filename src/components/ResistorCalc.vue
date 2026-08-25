@@ -90,22 +90,24 @@ const result = computed(() => {
   if (!target.value) return { error: '请点一个电阻的「算」，把它设为待求 Rx' }
   if (!refValid.value) return { error: '电压条件位置无效' }
 
-  // 构造求解输入：target 指向的电阻值为 null（未知），其余按输入解析
-  const netRows = rows.map((row, i) => ({
-    mode: row.mode,
-    values: row.resistors.map((r, j) => {
-      if (target.value && target.value.row === i && target.value.res === j) return null
-      return parseResistor(r)
-    }),
-  }))
-  // 校验：除 target 外无其他非法/缺失
+  // 构造求解输入：target 指向的电阻值为 null（未知），空输入忽略，其余按输入解析
+  const netRows = rows.map((row, i) => {
+    const values = []
+    row.resistors.forEach((r, j) => {
+      if (isTarget(i, j)) { values.push(null); return }
+      if (r.trim() === '') return // 空输入忽略（未填的电阻槽位）
+      const v = parseResistor(r)
+      values.push(v == null ? NaN : v) // 格式错误标记 NaN
+    })
+    return { mode: row.mode, values }
+  })
+  // 校验：target 已由上方保证唯一 null；其他 NaN=格式错误
   for (let i = 0; i < netRows.length; i++) {
     for (let j = 0; j < netRows[i].values.length; j++) {
       const val = netRows[i].values[j]
       if (val === null) continue // target
-      if (val == null || !isFinite(val) || val <= 0) {
-        const isTarget = target.value && target.value.row === i && target.value.res === j
-        if (!isTarget) return { error: `第 ${i + 1} 行第 ${j + 1} 个电阻：请填写数值（示例 10k），或点「算」设为待求` }
+      if (!isFinite(val) || val <= 0) {
+        return { error: `第 ${i + 1} 行第 ${j + 1} 个电阻：格式不对（示例 10k），或点「算」设为待求` }
       }
     }
   }

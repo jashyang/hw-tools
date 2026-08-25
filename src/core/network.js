@@ -62,6 +62,7 @@ export function solveUnknownResistor(rows, vcc, v, ref) {
 
   // 每行等效值随 x 变化的函数
   const fns = rows.map((row) => {
+    if (!row.values || row.values.length === 0) return () => 0 // 空行跳过（等效 0Ω）
     const known = row.values.filter((val) => val != null && isFinite(val) && val > 0)
     const hasX = row.values.some((val) => val == null)
     if (!hasX) {
