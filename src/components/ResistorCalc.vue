@@ -440,7 +440,7 @@ async function copyResult() {
 .network .section-title { justify-content: space-between; }
 .title-btn { margin-left: auto; flex-shrink: 0; }
 .net-row {
-  background: rgba(15, 21, 31, 0.38);
+  background: rgba(15, 21, 31, 0.3);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border);

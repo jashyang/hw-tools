@@ -68,7 +68,7 @@ body::after {
 
 /* ── 通用组件 ── */
 .panel {
-  background: linear-gradient(180deg, rgba(19, 27, 40, 0.6), rgba(15, 21, 31, 0.6));
+  background: linear-gradient(180deg, rgba(19, 27, 40, 0.42), rgba(15, 21, 31, 0.42));
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border);
@@ -115,7 +115,7 @@ input[type='text'], input[type='number'], input[type='password'] {
   font-family: var(--mono);
   font-size: 14px;
   color: var(--neon);
-  background: rgba(6, 9, 15, 0.5);
+  background: rgba(6, 9, 15, 0.4);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   border: 1px solid var(--border);
