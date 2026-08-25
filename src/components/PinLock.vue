@@ -71,7 +71,6 @@ const lockLeft = () => Math.max(0, Math.ceil((lockedUntil.value - Date.now()) / 
 
 <template>
   <div class="pinlock">
-    <div class="scanline"></div>
     <div class="pin-panel" :class="{ 'power-on': phase === 'unlock' }">
       <div class="boot-log">
         <div v-for="(line, i) in shown" :key="i" class="boot-line">
@@ -125,14 +124,6 @@ const lockLeft = () => Math.max(0, Math.ceil((lockedUntil.value - Date.now()) / 
   padding: 20px;
   position: relative;
   overflow: hidden;
-}
-.scanline {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 80px;
-  background: linear-gradient(180deg, transparent, rgba(0, 255, 159, 0.05), transparent);
-  animation: scanline 5s linear infinite;
-  pointer-events: none;
 }
 .pin-panel {
   width: 100%;

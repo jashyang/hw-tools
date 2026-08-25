@@ -163,10 +163,6 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   0%, 100% { box-shadow: 0 0 4px var(--neon-dim); }
   50% { box-shadow: 0 0 14px var(--neon-dim), 0 0 30px rgba(0,255,159,0.25); }
 }
-@keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
 @keyframes poweron {
   0% { opacity: 0; transform: scale(0.96); filter: brightness(3) saturate(0); }
   40% { opacity: 1; filter: brightness(2) saturate(1.2); }
@@ -461,18 +457,6 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   }
   .hamburger { display: block; }
   .main { padding: 12px 14px 24px; max-width: none; }
-}
-
-/* 全局轻量扫描线（内容页与登录页呼应） */
-.main::after {
-  content: '';
-  position: fixed;
-  left: 0; right: 0;
-  top: -80px;
-  height: 80px;
-  background: linear-gradient(180deg, transparent, rgba(0, 255, 159, 0.035), transparent);
-  animation: scanline 6s linear infinite;
-  pointer-events: none;
 }
 
 /* ══════ 结果面板（全局，CalcForm/ResistorCalc 共用）══════ */

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { parseResistor, formatOhms, formatVolt } from '../core/parse.js'
-import { rowEquiv, networkEquiv, dividerRx } from '../core/network.js'
+import { parseResistor, formatOhms, formatVolt, formatAmp } from '../core/parse.js'
+import { rowEquiv, networkEquiv, solveUnknownResistor } from '../core/network.js'
 
 // ── 模式：等效电阻 / 分压电阻 ──
 const mode = ref('equiv')
@@ -15,7 +15,12 @@ const rows = reactive([newRow()])
 
 // ── 分压模式输入 ──
 const vcc = ref('')
-const vout = ref('')
+const v = ref('')
+// 电压条件位置：row = 某行两端压降；node = 某节点对地（节点 i 在第 i 行之后，节点 0=Vcc 顶端）
+const refType = ref('row')
+const refIndex = ref(0)
+// 待求电阻：{row, res} 指向 rows[row].resistors[res]；null = 未指定
+const target = ref(null)
 
 // ── 解析 ──
 const parsedRows = computed(() =>
@@ -48,9 +53,22 @@ const rowTotal = (row) => {
 
 // ── 结果 ──
 const vccVal = computed(() => parseVolt(vcc.value))
-const voutVal = computed(() => parseVolt(vout.value))
+const vVal = computed(() => parseVolt(v.value))
 const vccInvalid = computed(() => vcc.value.trim() !== '' && vccVal.value === null)
-const voutInvalid = computed(() => vout.value.trim() !== '' && voutVal.value === null)
+const vInvalid = computed(() => v.value.trim() !== '' && vVal.value === null)
+
+// 电压条件位置是否合法
+const refValid = computed(() => {
+  const n = rows.length
+  if (refType.value === 'row') return refIndex.value >= 0 && refIndex.value < n
+  return refIndex.value >= 1 && refIndex.value < n // node: 1..N-1（0=Vcc、N=GND 无意义）
+})
+
+// 当前电压条件文本（结果显示用）
+const refLabel = computed(() => {
+  if (refType.value === 'row') return `第 ${refIndex.value + 1} 行两端压降`
+  return `节点 ${refIndex.value} 对地`
+})
 
 const result = computed(() => {
   if (mode.value === 'equiv') {
@@ -65,34 +83,88 @@ const result = computed(() => {
     }
   }
   // divider 模式
-  if (!validRows.value.length) return { error: '请先填写上臂电阻网络' }
+  if (!validRows.value.length) return { error: '请先填写电阻网络' }
   if (validRows.value.some((r) => r.invalid)) return { error: '有电阻值格式不对，示例：1k / 2.2k / 470' }
-  if (vccInvalid.value || voutInvalid.value) return { error: '电压格式不对，示例：12 / 5V' }
-  if (vcc.value.trim() === '' || vout.value.trim() === '') return { error: '请填写电源电压和目标电压' }
-  const rNet = networkEquiv(validRows.value)
-  const rx = dividerRx(rNet, vccVal.value, voutVal.value)
-  if (rx === null) return { error: '无解：目标电压需大于 0 且小于电源电压' }
+  if (vccInvalid.value || vInvalid.value) return { error: '电压格式不对，示例：12 / 5V' }
+  if (vcc.value.trim() === '' || v.value.trim() === '') return { error: '请填写电源电压 Vcc 和给定电压 V' }
+  if (!target.value) return { error: '请点一个电阻的「算」，把它设为待求 Rx' }
+  if (!refValid.value) return { error: '电压条件位置无效' }
+
+  // 构造求解输入：target 指向的电阻值为 null（未知），其余按输入解析
+  const netRows = rows.map((row, i) => ({
+    mode: row.mode,
+    values: row.resistors.map((r, j) => {
+      if (target.value && target.value.row === i && target.value.res === j) return null
+      return parseResistor(r)
+    }),
+  }))
+  // 校验：除 target 外无其他非法/缺失
+  for (let i = 0; i < netRows.length; i++) {
+    for (let j = 0; j < netRows[i].values.length; j++) {
+      const val = netRows[i].values[j]
+      if (val === null) continue // target
+      if (val == null || !isFinite(val) || val <= 0) {
+        const isTarget = target.value && target.value.row === i && target.value.res === j
+        if (!isTarget) return { error: `第 ${i + 1} 行第 ${j + 1} 个电阻：请填写数值（示例 10k），或点「算」设为待求` }
+      }
+    }
+  }
+  const sol = solveUnknownResistor(netRows, vccVal.value, vVal.value, {
+    type: refType.value,
+    index: refIndex.value,
+  })
+  if (!sol) return { error: '无解：检查电压条件与电阻网络是否一致（V 需在 0~Vcc 之间且条件可达）' }
+  const ratio = vVal.value / vccVal.value
+  const current = vccVal.value / sol.rTotal
   return {
     results: [
-      { label: 'Rx 电阻', value: formatOhms(rx), note: '分压下臂，Vout 点 → Rx → GND' },
-      { label: '上臂等效 R_net', value: formatOhms(rNet) },
-      { label: '分压比', value: `${((voutVal.value / vccVal.value) * 100).toFixed(1)}%` },
+      { label: '待求电阻 Rx', value: formatOhms(sol.rx), note: `「算」标记位置：第 ${target.value.row + 1} 行第 ${target.value.res + 1} 个` },
+      { label: '总等效电阻', value: formatOhms(sol.rTotal) },
+      { label: '回路电流', value: formatAmp(current) },
+      { label: '电压条件', value: formatVolt(vVal.value), note: `${refLabel.value} = ${formatVolt(vVal.value)}（Vcc ${formatVolt(vccVal.value)} 的 ${(ratio * 100).toFixed(1)}%）` },
     ],
   }
 })
 
 // ── 行操作 ──
 function addRow() { rows.push(newRow()) }
-function removeRow(i) { if (rows.length > 1) rows.splice(i, 1) }
+function removeRow(i) {
+  if (rows.length <= 1) return
+  rows.splice(i, 1)
+  if (target.value && target.value.row === i) target.value = null
+  else if (target.value && target.value.row > i) target.value = { ...target.value, row: target.value.row - 1 }
+  // 修正 refIndex 越界
+  if (refType.value === 'row' && refIndex.value >= rows.length) refIndex.value = rows.length - 1
+  if (refType.value === 'node' && refIndex.value >= rows.length) refIndex.value = rows.length - 1
+}
 function addResistor(row) { row.resistors.push('') }
-function removeResistor(row, j) { if (row.resistors.length > 1) row.resistors.splice(j, 1) }
+function removeResistor(row, j) {
+  if (row.resistors.length <= 1) return
+  row.resistors.splice(j, 1)
+  if (target.value && target.value.row === rows.indexOf(row) && target.value.res === j) target.value = null
+}
+
+// 把某电阻设为待求（再次点击取消）
+function setTarget(row, j) {
+  if (target.value && target.value.row === row && target.value.res === j) {
+    target.value = null
+    return
+  }
+  target.value = { row, res: j }
+  rows[row].resistors[j] = '' // 清空输入，?Ω 占位
+}
+
+// 该电阻是否为待求
+function isTarget(row, j) {
+  return !!target.value && target.value.row === row && target.value.res === j
+}
 
 // ── 复制 ──
 const copied = ref(false)
 async function copyResult() {
   if (!result.value || result.value.error) return
   const lines = result.value.results.map((r) => `${r.label}: ${r.value}${r.note ? '（' + r.note + '）' : ''}`)
-  const text = `电阻计算（${mode.value === 'equiv' ? '等效电阻' : '分压电阻'}）\n${lines.join('\n')}`
+  const text = `电阻计算（${mode.value === 'equiv' ? '等效电阻' : '分压反推'}）\n${lines.join('\n')}`
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -123,8 +195,27 @@ async function copyResult() {
         <input v-model="vcc" type="text" inputmode="decimal" class="field-input" :class="{ invalid: vccInvalid }" placeholder="如 12" autocomplete="off" spellcheck="false" />
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">目标电压 Vout</span><span class="funit">V</span></label>
-        <input v-model="vout" type="text" inputmode="decimal" class="field-input" :class="{ invalid: voutInvalid }" placeholder="如 5" autocomplete="off" spellcheck="false" />
+        <label class="field-label"><span class="fname">给定电压 V</span><span class="funit">V</span></label>
+        <input v-model="v" type="text" inputmode="decimal" class="field-input" :class="{ invalid: vInvalid }" placeholder="如 5" autocomplete="off" spellcheck="false" />
+      </div>
+      <!-- 电压条件位置 -->
+      <div class="field ref-field">
+        <label class="field-label"><span class="fname">电压位置</span></label>
+        <div class="ref-row">
+          <div class="seg">
+            <button class="seg-btn" :class="{ on: refType === 'row' }" @click="refType = 'row'">行两端</button>
+            <button class="seg-btn" :class="{ on: refType === 'node' }" @click="refType = 'node'; refIndex = 1">节点对地</button>
+          </div>
+          <select v-model.number="refIndex" class="ref-select" :class="{ invalid: !refValid }">
+            <template v-if="refType === 'row'">
+              <option v-for="i in rows.length" :key="i" :value="i - 1">第 {{ i }} 行</option>
+            </template>
+            <template v-else>
+              <option v-for="i in rows.length - 1" :key="i" :value="i">节点 {{ i }}</option>
+            </template>
+          </select>
+        </div>
+        <div class="ref-hint">行两端 = 该行压降；节点 i 对地 = 第 i 行之后到 GND 的电压</div>
       </div>
     </div>
 
@@ -150,11 +241,18 @@ async function copyResult() {
               type="text"
               inputmode="decimal"
               class="field-input"
-              :class="{ invalid: parsedRows[i].invalid[j] }"
-              placeholder="如 10k"
+              :class="{ invalid: parsedRows[i].invalid[j], target: isTarget(i, j) }"
+              :placeholder="isTarget(i, j) ? '?Ω' : '如 10k'"
               autocomplete="off"
               spellcheck="false"
             />
+            <button
+              v-if="mode === 'divider'"
+              class="btn cyan sm r-calc"
+              :class="{ on: isTarget(i, j) }"
+              :title="isTarget(i, j) ? '取消待求' : '设为待求 Rx'"
+              @click="setTarget(i, j)"
+            >{{ isTarget(i, j) ? '✓' : '算' }}</button>
             <button v-if="row.resistors.length > 1" class="btn danger sm r-del" @click="removeResistor(row, j)">✕</button>
           </div>
           <button class="btn cyan sm r-add" @click="addResistor(row)">＋</button>
@@ -286,6 +384,46 @@ async function copyResult() {
 }
 .row-del { flex-shrink: 0; width: 28px; }
 
+/* 电压条件位置 */
+.ref-field { flex-basis: 100%; }
+.ref-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ref-select {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--cyan);
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  outline: none;
+}
+.ref-select.invalid { border-color: #ff5c5c; color: #ff5c5c; }
+.ref-hint {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* 待求电阻输入框 + 「算」按钮 */
+.field-input.target {
+  border-color: var(--neon);
+  color: var(--neon);
+  box-shadow: var(--glow-green);
+}
+.r-calc { flex-shrink: 0; min-width: 30px; padding: 2px 4px; }
+.r-calc.on {
+  background: rgba(0, 255, 159, 0.15);
+  border-color: var(--neon);
+  color: var(--neon);
+  box-shadow: var(--glow-green);
+}
+
 .row-resistors {
   display: flex;
   flex-wrap: wrap;
@@ -297,8 +435,8 @@ async function copyResult() {
   gap: 4px;
   align-items: center;
   flex: 1;
-  min-width: 110px;
-  max-width: 200px;
+  min-width: 130px;
+  max-width: 240px;
 }
 .r-input .field-input { flex: 1; }
 .r-del { flex-shrink: 0; width: 26px; padding: 2px 0; }

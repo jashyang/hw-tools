@@ -33,10 +33,10 @@ const currentCatName = computed(() => {
 </script>
 
 <template>
+  <CircuitBg />
   <PinLock v-if="!unlocked" @unlock="onUnlock" />
 
   <template v-else>
-    <CircuitBg />
     <div class="layout">
     <!-- 移动端遮罩 -->
     <div v-if="navOpen" class="nav-mask" @click="navOpen = false"></div>

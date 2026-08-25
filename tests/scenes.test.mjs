@@ -2,7 +2,7 @@
 import { scenes } from '/home/hermes/projects/hw-tools/src/core/scenes.js'
 import {
   rowEquiv, networkEquiv, dividerRx,
-  seriesSum, parallelSum,
+  seriesSum, parallelSum, solveUnknownResistor,
 } from '/home/hermes/projects/hw-tools/src/core/network.js'
 
 const byId = Object.fromEntries(scenes.map((s) => [s.id, s]))
@@ -46,6 +46,59 @@ approx('divider: R_net=2k Vcc=12 Vout=6 → Rx=2k', dividerRx(2000, 12, 6), 2000
 approx('divider: R_net=10k Vcc=5 Vout=3.3', dividerRx(10000, 5, 3.3), 10000 * 3.3 / 1.7)
 check('divider: Vout>=Vcc → null', dividerRx(1000, 5, 5), null)
 check('divider: Vout=0 → null', dividerRx(1000, 5, 0), null)
+
+// ── 通用反推：多行网络求未知电阻 ──
+// 经典分压：Vcc=12, 上臂 1k 串联, 下臂待求 x, 节点1（第1行后）对地=6V → x = 1k
+{
+  const s = solveUnknownResistor(
+    [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }],
+    12, 6, { type: 'node', index: 1 }
+  )
+  approx('solve: 经典分压节点6V → x=1k', s.rx, 1000)
+}
+// 反推上臂：Vcc=12, 上臂待求 x, 下臂 2k, 节点1对地=8V → x = 1k
+{
+  const s = solveUnknownResistor(
+    [{ mode: 'series', values: [null] }, { mode: 'series', values: [2000] }],
+    12, 8, { type: 'node', index: 1 }
+  )
+  approx('solve: 反推上臂 → x=1k', s.rx, 1000)
+}
+// 行两端压降：Vcc=12, 行1 串联 2k, 行2 待求 x，行2两端=4V → x=1k
+{
+  const s = solveUnknownResistor(
+    [{ mode: 'series', values: [2000] }, { mode: 'series', values: [null] }],
+    12, 4, { type: 'row', index: 1 }
+  )
+  approx('solve: 行2压降4V → x=1k', s.rx, 1000)
+}
+// 未知在并联行内：Vcc=12, 行1 并联 [2k, null] 待求, 行2 串联 1k, 节点1对地=6V
+// 行2=1k 占 6V → 行1 等效必须 =1k；行1 并联 2k||x=1k → x=2k
+{
+  const s = solveUnknownResistor(
+    [{ mode: 'parallel', values: [2000, null] }, { mode: 'series', values: [1000] }],
+    12, 6, { type: 'node', index: 1 }
+  )
+  approx('solve: 并联行内求 x (2k||x=1k) → x=2k', s.rx, 2000)
+}
+// 节点电压在未知行之后：Vcc=12, 行1 待求 x, 行2 串联 1k, 节点1对地=4V
+// 节点1在行1与行2之间 → 对地电压 = 行2压降 = 12×1000/(x+1000) = 4 → x=2000
+{
+  const s = solveUnknownResistor(
+    [{ mode: 'series', values: [null] }, { mode: 'series', values: [1000] }],
+    12, 4, { type: 'node', index: 1 }
+  )
+  approx('solve: 节点在未知后 → x=2000', s.rx, 2000)
+}
+// 无解：目标电压超出可达范围
+check('solve: V>=Vcc → null', solveUnknownResistor(
+  [{ mode: 'series', values: [1000] }, { mode: 'series', values: [null] }],
+  12, 12, { type: 'node', index: 1 }
+), null)
+check('solve: 全已知无未知 → null', solveUnknownResistor(
+  [{ mode: 'series', values: [1000] }, { mode: 'series', values: [1000] }],
+  12, 6, { type: 'node', index: 1 }
+), null)
 
 // ── 功率计算 ──
 {
