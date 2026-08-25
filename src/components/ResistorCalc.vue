@@ -1,10 +1,15 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { parseResistor, formatOhms, formatVolt, formatAmp, parseVolt } from '../core/parse.js'
 import { rowEquiv, networkEquiv, solveVoltagePoints } from '../core/network.js'
 
 // ── 模式：等效电阻 / 分压电阻 ──
 const mode = ref('equiv')
+
+// 切到分压模式：自动保证至少 2 行（分压最小结构 = 上臂+下臂，电压点在中间）
+watch(mode, (m) => {
+  if (m === 'divider' && rows.length < 2) rows.push(newRow())
+})
 
 // ── 多行网络（每行：串/并 + 多个电阻） ──
 let rowSeq = 0
@@ -250,6 +255,7 @@ async function copyResult() {
         <label class="field-label"><span class="fname">电压点（对地）</span><span class="funit">{{ validPoints.length }} 个有效</span></label>
         <div v-for="(pt, i) in points" :key="pt.id" class="pt-row">
           <select v-model.number="pt.index" class="ref-select" :class="{ invalid: !indexValid(pt.index) || dupIndex === pt.index }">
+            <option v-if="rows.length <= 1" value="0" disabled>先添加电阻行</option>
             <option v-for="k in rows.length - 1" :key="k" :value="k">第 {{ k }} 行之后</option>
           </select>
           <input
@@ -265,7 +271,7 @@ async function copyResult() {
           <button v-if="points.length > 1" class="btn danger sm pt-del" @click="removePoint(i)">✕</button>
         </div>
         <button class="btn cyan sm pt-add" @click="addPoint">＋ 添加电压点</button>
-        <div class="ref-hint">电压点 = 该位置对地电压；填了 Vcc 至少 1 个点，没填 Vcc 至少 2 个点</div>
+        <div class="ref-hint">电压点 = 该位置对地电压；需先添加电阻行（分压至少 2 行）。填了 Vcc 至少 1 个点，没填 Vcc 至少 2 个点</div>
       </div>
     </div>
 
