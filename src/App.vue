@@ -9,7 +9,7 @@ const UNLOCK_KEY = 'hw-tools-unlock-until'
 const UNLOCK_TTL = 24 * 3600 * 1000 // 24 小时
 
 const unlocked = ref(false)
-const currentId = ref('ohm') // 默认选中第一个场景
+const currentId = ref(CATEGORIES[0].items[0]) // 默认选中第一个场景
 const navOpen = ref(false) // 移动端侧栏展开
 
 // 初始化：读取 localStorage 解锁时间戳
@@ -43,7 +43,7 @@ const currentCatName = computed(() => {
 
     <!-- 左侧分类导航 -->
     <aside class="sidebar" :class="{ open: navOpen }">
-      <div class="side-logo" @click="currentId = 'ohm'">
+      <div class="side-logo" @click="currentId = CATEGORIES[0].items[0]">
         <span class="chip"></span>HW-TOOLS
       </div>
       <nav class="side-nav">
