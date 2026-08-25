@@ -29,6 +29,7 @@ defineProps({
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
 }
 .scene-head {
   display: flex;
@@ -68,5 +69,5 @@ defineProps({
   color: var(--neon);
   font-weight: 700;
 }
-.calc-panel { display: flex; flex-direction: column; gap: 10px; }
+.calc-panel { display: flex; flex-direction: column; gap: 10px; flex: 1; }
 </style>

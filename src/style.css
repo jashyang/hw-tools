@@ -411,6 +411,8 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   flex: 1;
   min-width: 0;
   padding: 16px 16px 32px;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 终端状态栏 */
