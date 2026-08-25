@@ -73,13 +73,13 @@
 }
 .trace {
   fill: none;
-  stroke: rgba(0, 255, 159, 0.16);
-  stroke-width: 0.7;
+  stroke: rgba(0, 255, 159, 0.3);
+  stroke-width: 0.9;
   stroke-dasharray: 1.6 1.8;
   animation: trace-flow 2.4s linear infinite;
 }
 .trace.dim {
-  stroke: rgba(0, 229, 255, 0.12);
+  stroke: rgba(0, 229, 255, 0.22);
   animation-duration: 3.2s;
 }
 /* 虚线流动 = 电流在导线里跑 */

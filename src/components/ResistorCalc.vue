@@ -21,7 +21,8 @@ const rows = reactive([newRow()])
 // ── 分压模式输入 ──
 const vcc = ref('') // 可选：填了作为顶部电压点（节点0）；不填则用 ≥2 个电压点反推
 // 电压点：{ [index]: 电压字符串 }，index=节点位置（第 index 行之后，1..N-1；0=Vcc 顶端不可设）
-const pointVals = reactive({ 1: '' })
+// 初始为空，用户点电阻行之间的 ● 激活
+const pointVals = reactive({})
 // 待求电阻：{row, res} 指向 rows[row].resistors[res]；null = 未指定
 const target = ref(null)
 
