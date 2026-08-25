@@ -399,7 +399,7 @@ async function copyResult() {
   display: flex;
   gap: 6px;
   padding: 4px;
-  background: var(--bg-deep);
+  background: rgba(6, 9, 15, 0.45);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -440,7 +440,9 @@ async function copyResult() {
 .network .section-title { justify-content: space-between; }
 .title-btn { margin-left: auto; flex-shrink: 0; }
 .net-row {
-  background: rgba(15, 21, 31, 0.6);
+  background: rgba(15, 21, 31, 0.38);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
@@ -457,7 +459,7 @@ async function copyResult() {
 .seg {
   display: flex;
   gap: 3px;
-  background: var(--bg-deep);
+  background: rgba(6, 9, 15, 0.45);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 2px;
@@ -517,7 +519,7 @@ async function copyResult() {
   height: 30px;
   border-radius: 50%;
   border: 1px solid var(--border);
-  background: var(--bg-deep);
+  background: rgba(6, 9, 15, 0.45);
   color: var(--dim);
   font-size: 14px;
   line-height: 1;

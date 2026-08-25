@@ -53,7 +53,9 @@ defineProps({
   font-family: var(--mono);
   font-size: 13px;
   color: var(--cyan);
-  background: var(--bg-deep);
+  background: rgba(6, 9, 15, 0.5);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--cyan-dim);
   border-radius: 8px;
   padding: 9px 14px;
