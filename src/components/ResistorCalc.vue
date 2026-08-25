@@ -603,7 +603,7 @@ async function copyResult() {
   align-items: center;
   flex: 1;
   min-width: 150px;
-  max-width: 300px;
+  max-width: 480px;
 }
 .r-input .field-input { flex: 1; }
 .r-del { flex-shrink: 0; width: 26px; padding: 2px 0; }

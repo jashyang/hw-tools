@@ -17,44 +17,6 @@
       <path class="pulse-bar cyan" d="M-2 30 H16 V56 H44 V84 H102" />
       <path class="pulse-bar" d="M-2 88 H30 V58 H62 V30 H102" />
       <path class="pulse-bar cyan" d="M-2 74 H22 V46 H52 V14 H102" />
-      <!-- 脉冲光点：多个光点错开沿走线流动，模拟电流脉冲传播 -->
-      <circle class="pulse" r="0.3" fill="#00ff9f">
-        <animateMotion dur="9s" repeatCount="indefinite" path="M-2 18 H28 V42 H58 V68 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" repeatCount="indefinite" />
-      </circle>
-      <circle class="pulse" r="0.24" fill="#00ff9f">
-        <animateMotion dur="9s" begin="-1.5s" repeatCount="indefinite" path="M-2 18 H28 V42 H58 V68 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.5s" repeatCount="indefinite" />
-      </circle>
-      <circle class="pulse cyan" r="0.24" fill="#00e5ff">
-        <animateMotion dur="13s" repeatCount="indefinite" path="M-2 30 H16 V56 H44 V84 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="4s" repeatCount="indefinite" />
-      </circle>
-      <circle class="pulse cyan" r="0.2" fill="#00e5ff">
-        <animateMotion dur="13s" begin="-2s" repeatCount="indefinite" path="M-2 30 H16 V56 H44 V84 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="4s" begin="-2s" repeatCount="indefinite" />
-      </circle>
-      <circle class="pulse" r="0.28" fill="#00ff9f">
-        <animateMotion dur="11s" repeatCount="indefinite" path="M-2 88 H30 V58 H62 V30 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3.5s" repeatCount="indefinite" />
-      </circle>
-      <circle class="pulse" r="0.22" fill="#00ff9f">
-        <animateMotion dur="11s" begin="-1.2s" repeatCount="indefinite" path="M-2 88 H30 V58 H62 V30 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3.5s" begin="-1.2s" repeatCount="indefinite" />
-      </circle>
-      <circle class="pulse cyan" r="0.22" fill="#00e5ff">
-        <animateMotion dur="15s" repeatCount="indefinite" path="M-2 74 H22 V46 H52 V14 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="4.5s" repeatCount="indefinite" />
-      </circle>
-      <circle class="pulse cyan" r="0.18" fill="#00e5ff">
-        <animateMotion dur="15s" begin="-2.5s" repeatCount="indefinite" path="M-2 74 H22 V46 H52 V14 H102" />
-        <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="4.5s" begin="-2.5s" repeatCount="indefinite" />
-      </circle>
-      <!-- 节点焊盘 -->
-      <circle cx="28" cy="42" r="0.7" fill="none" stroke="#00ff9f" stroke-width="0.15" class="node" />
-      <circle cx="58" cy="68" r="0.7" fill="none" stroke="#00ff9f" stroke-width="0.15" class="node" />
-      <circle cx="30" cy="58" r="0.7" fill="none" stroke="#00e5ff" stroke-width="0.15" class="node" />
-      <circle cx="62" cy="30" r="0.7" fill="none" stroke="#00e5ff" stroke-width="0.15" class="node" />
     </svg>
   </div>
 </template>
@@ -105,19 +67,5 @@
 @keyframes pulse-travel {
   0% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: -151.2; }
-}
-/* 光点：脉冲式亮灭（像示波器脉冲波） */
-.pulse {
-  filter: drop-shadow(0 0 1px #00ff9f);
-}
-.pulse.cyan {
-  filter: drop-shadow(0 0 1px #00e5ff);
-}
-.node {
-  animation: node-blink 2.4s ease-in-out infinite;
-}
-@keyframes node-blink {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 0.6; }
 }
 </style>
