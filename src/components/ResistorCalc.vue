@@ -600,8 +600,8 @@ async function copyResult() {
   gap: 4px;
   align-items: center;
   flex: 1;
-  min-width: 130px;
-  max-width: 240px;
+  min-width: 150px;
+  max-width: 300px;
 }
 .r-input .field-input { flex: 1; }
 .r-del { flex-shrink: 0; width: 26px; padding: 2px 0; }
