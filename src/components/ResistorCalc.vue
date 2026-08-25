@@ -19,10 +19,9 @@ function newRow() {
 const rows = reactive([newRow()])
 
 // ── 分压模式输入 ──
-const vcc = ref('') // 可选：填了作为顶部电压点；不填则用 ≥2 个电压点反推
-// 电压点列表：{id, index(第 index 行之后), v(对地电压)}
-let ptSeq = 0
-const points = reactive([{ id: ++ptSeq, index: 1, v: '' }])
+const vcc = ref('') // 可选：填了作为顶部电压点（节点0）；不填则用 ≥2 个电压点反推
+// 电压点：{ [index]: 电压字符串 }，index=节点位置（第 index 行之后，1..N-1；0=Vcc 顶端不可设）
+const pointVals = reactive({ 1: '' })
 // 待求电阻：{row, res} 指向 rows[row].resistors[res]；null = 未指定
 const target = ref(null)
 
@@ -59,28 +58,18 @@ const rowTotal = (row) => {
 const vccVal = computed(() => parseVolt(vcc.value))
 const vccInvalid = computed(() => vcc.value.trim() !== '' && vccVal.value === null)
 
-// 电压点解析与校验
-const parsedPoints = computed(() =>
-  points.map((p) => ({
-    id: p.id,
-    index: p.index,
-    v: parseVolt(p.v),
-    invalid: p.v.trim() !== '' && parseVolt(p.v) === null,
-    empty: p.v.trim() === '',
+// 电压点解析与校验（pointVals: {index: 电压字符串}）
+const pointEntries = computed(() =>
+  Object.entries(pointVals).map(([index, v]) => ({
+    index: Number(index),
+    v: parseVolt(v),
+    raw: v,
+    invalid: v.trim() !== '' && parseVolt(v) === null,
+    empty: v.trim() === '',
   }))
 )
 // 有效电压点（填了电压的）
-const validPoints = computed(() => parsedPoints.value.filter((p) => !p.empty && !p.invalid))
-// 位置是否重复
-const dupIndex = computed(() => {
-  const seen = new Set()
-  for (const p of parsedPoints.value) {
-    if (p.empty) continue
-    if (seen.has(p.index)) return p.index
-    seen.add(p.index)
-  }
-  return null
-})
+const validPoints = computed(() => pointEntries.value.filter((p) => !p.empty && !p.invalid))
 // 电压点位置是否合法（节点 1..N-1）
 const indexValid = (idx) => idx >= 1 && idx < rows.length
 
@@ -92,12 +81,23 @@ const pointsEnough = computed(() => {
 
 // 电压点位置是否都已指定且合法
 const pointsIndexOk = computed(() => {
-  for (const p of parsedPoints.value) {
+  for (const p of pointEntries.value) {
     if (p.empty) continue
     if (!indexValid(p.index)) return false
   }
   return true
 })
+
+// 某节点是否已设电压点
+const isPoint = (idx) => Object.prototype.hasOwnProperty.call(pointVals, idx)
+// 切换某节点为电压点（再次点击清除）
+function togglePoint(idx) {
+  if (isPoint(idx)) {
+    delete pointVals[idx]
+  } else {
+    pointVals[idx] = ''
+  }
+}
 
 const result = computed(() => {
   if (mode.value === 'equiv') {
@@ -115,14 +115,13 @@ const result = computed(() => {
   if (!validRows.value.length) return { error: '请先填写电阻网络' }
   if (validRows.value.some((r) => r.invalid)) return { error: '有电阻值格式不对，示例：1k / 2.2k / 470' }
   if (vccInvalid.value) return { error: 'Vcc 格式不对，示例：12 / 5V' }
-  if (parsedPoints.value.some((p) => p.invalid)) return { error: '电压点电压格式不对，示例：5 / 3.3V' }
+  if (pointEntries.value.some((p) => p.invalid)) return { error: '电压点电压格式不对，示例：5 / 3.3V' }
   if (!target.value) return { error: '请点一个电阻的「算」，把它设为待求 Rx' }
-  if (!pointsIndexOk.value) return { error: '电压点位置无效（需在第 1~N-1 行之后）' }
-  if (dupIndex.value != null) return { error: `电压点位置重复：第 ${dupIndex.value} 行之后` }
+  if (!pointsIndexOk.value) return { error: '电压点位置无效' }
   if (!pointsEnough.value) {
     return vcc.value.trim() !== ''
-      ? { error: '请至少填写 1 个电压点' }
-      : { error: '未填 Vcc 时请至少填写 2 个电压点' }
+      ? { error: '请至少设置 1 个电压点（点电阻行之间的 ●）' }
+      : { error: '未填 Vcc 时请至少设置 2 个电压点（点电阻行之间的 ●）' }
   }
 
   // 构造求解输入：target 指向的电阻值为 null（未知），空输入忽略，其余按输入解析
@@ -202,19 +201,6 @@ function isTarget(row, j) {
   return !!target.value && target.value.row === row && target.value.res === j
 }
 
-// ── 电压点操作 ──
-function addPoint() {
-  // 默认取第一个未使用的合法位置
-  const used = new Set(points.map((p) => p.index))
-  let idx = 1
-  while (used.has(idx) && idx < rows.length) idx++
-  points.push({ id: ++ptSeq, index: idx < rows.length ? idx : 1, v: '' })
-}
-function removePoint(i) {
-  if (points.length <= 1) return
-  points.splice(i, 1)
-}
-
 // ── 复制 ──
 const copied = ref(false)
 async function copyResult() {
@@ -250,70 +236,75 @@ async function copyResult() {
         <label class="field-label"><span class="fname">电源电压 Vcc</span><span class="funit">V·可选</span></label>
         <input v-model="vcc" type="text" inputmode="decimal" class="field-input" :class="{ invalid: vccInvalid }" placeholder="可不填" autocomplete="off" spellcheck="false" />
       </div>
-      <!-- 电压点列表 -->
       <div class="field ref-field">
-        <label class="field-label"><span class="fname">电压点（对地）</span><span class="funit">{{ validPoints.length }} 个有效</span></label>
-        <div v-for="(pt, i) in points" :key="pt.id" class="pt-row">
-          <select v-model.number="pt.index" class="ref-select" :class="{ invalid: !indexValid(pt.index) || dupIndex === pt.index }">
-            <option v-if="rows.length <= 1" value="0" disabled>先添加电阻行</option>
-            <option v-for="k in rows.length - 1" :key="k" :value="k">第 {{ k }} 行之后</option>
-          </select>
-          <input
-            v-model="pt.v"
-            type="text"
-            inputmode="decimal"
-            class="field-input pt-v"
-            :class="{ invalid: parsedPoints[i] && parsedPoints[i].invalid }"
-            placeholder="如 3.3"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button v-if="points.length > 1" class="btn danger sm pt-del" @click="removePoint(i)">✕</button>
-        </div>
-        <button class="btn cyan sm pt-add" @click="addPoint">＋ 添加电压点</button>
-        <div class="ref-hint">电压点 = 该位置对地电压；需先添加电阻行（分压至少 2 行）。填了 Vcc 至少 1 个点，没填 Vcc 至少 2 个点</div>
+        <div class="ref-hint">电压点 = 点电阻行之间的 ● 设置（对地电压）。填了 Vcc 至少 1 个点，没填 Vcc 至少 2 个点</div>
       </div>
     </div>
 
     <!-- 多行网络 -->
     <div class="network">
       <div class="section-title">电阻网络（行内合并 → 行间串联）</div>
-      <div v-for="(row, i) in rows" :key="row.id" class="net-row">
-        <div class="row-head">
-          <div class="seg">
-            <button class="seg-btn" :class="{ on: row.mode === 'series' }" @click="row.mode = 'series'">串联</button>
-            <button class="seg-btn" :class="{ on: row.mode === 'parallel' }" @click="row.mode = 'parallel'">并联</button>
+      <template v-for="(row, i) in rows" :key="row.id">
+        <div class="net-row">
+          <div class="row-head">
+            <div class="seg">
+              <button class="seg-btn" :class="{ on: row.mode === 'series' }" @click="row.mode = 'series'">串联</button>
+              <button class="seg-btn" :class="{ on: row.mode === 'parallel' }" @click="row.mode = 'parallel'">并联</button>
+            </div>
+            <span class="row-tag">第 {{ i + 1 }} 行</span>
+            <span class="row-total" :class="{ ok: rowTotal(row) != null }">
+              {{ rowTotal(row) != null ? '= ' + formatOhms(rowTotal(row)) : '' }}
+            </span>
+            <button class="btn danger sm row-del" :disabled="rows.length <= 1" @click="removeRow(i)">✕</button>
           </div>
-          <span class="row-tag">第 {{ i + 1 }} 行</span>
-          <span class="row-total" :class="{ ok: rowTotal(row) != null }">
-            {{ rowTotal(row) != null ? '= ' + formatOhms(rowTotal(row)) : '' }}
-          </span>
-          <button class="btn danger sm row-del" :disabled="rows.length <= 1" @click="removeRow(i)">✕</button>
-        </div>
-        <div class="row-resistors">
-          <div v-for="(r, j) in row.resistors" :key="j" class="r-input">
-            <input
-              v-model="row.resistors[j]"
-              type="text"
-              inputmode="decimal"
-              class="field-input"
-              :class="{ invalid: parsedRows[i].invalid[j], target: isTarget(i, j) }"
-              :placeholder="isTarget(i, j) ? '?Ω' : '如 10k'"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            <button
-              v-if="mode === 'divider'"
-              class="btn cyan sm r-calc"
-              :class="{ on: isTarget(i, j) }"
-              :title="isTarget(i, j) ? '取消待求' : '设为待求 Rx'"
-              @click="setTarget(i, j)"
-            >{{ isTarget(i, j) ? '✓' : '算' }}</button>
-            <button v-if="row.resistors.length > 1" class="btn danger sm r-del" @click="removeResistor(row, j)">✕</button>
+          <div class="row-resistors">
+            <div v-for="(r, j) in row.resistors" :key="j" class="r-input">
+              <input
+                v-model="row.resistors[j]"
+                type="text"
+                inputmode="decimal"
+                class="field-input"
+                :class="{ invalid: parsedRows[i].invalid[j], target: isTarget(i, j) }"
+                :placeholder="isTarget(i, j) ? '?Ω' : '如 10k'"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button
+                v-if="mode === 'divider'"
+                class="btn cyan sm r-calc"
+                :class="{ on: isTarget(i, j) }"
+                :title="isTarget(i, j) ? '取消待求' : '设为待求 Rx'"
+                @click="setTarget(i, j)"
+              >{{ isTarget(i, j) ? '✓' : '算' }}</button>
+              <button v-if="row.resistors.length > 1" class="btn danger sm r-del" @click="removeResistor(row, j)">✕</button>
+            </div>
+            <button class="btn cyan sm r-add" @click="addResistor(row)">＋</button>
           </div>
-          <button class="btn cyan sm r-add" @click="addResistor(row)">＋</button>
         </div>
-      </div>
+        <!-- 节点槽：每行之后一个电压点 ●（分压模式，除最后一行；最后是 GND） -->
+        <div v-if="mode === 'divider'" class="node-slot" :class="{ gnd: i === rows.length - 1 }">
+          <button
+            v-if="i < rows.length - 1"
+            class="node-btn"
+            :class="{ on: isPoint(i + 1) }"
+            :title="isPoint(i + 1) ? '取消电压点' : '在此设置电压点'"
+            @click="togglePoint(i + 1)"
+          >●</button>
+          <span v-else class="node-dot">●</span>
+          <span class="node-label">{{ i < rows.length - 1 ? `第 ${i + 1} 行之后` : 'GND' }}</span>
+          <input
+            v-if="i < rows.length - 1 && isPoint(i + 1)"
+            v-model="pointVals[i + 1]"
+            type="text"
+            inputmode="decimal"
+            class="field-input pt-v"
+            :class="{ invalid: pointVals[i + 1] && pointVals[i + 1].trim() !== '' && parseVolt(pointVals[i + 1]) === null }"
+            placeholder="对地电压，如 3.3"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </template>
       <button class="btn cyan sm row-add" @click="addRow">＋ 添加一行</button>
     </div>
 
@@ -440,40 +431,69 @@ async function copyResult() {
 }
 .row-del { flex-shrink: 0; width: 28px; }
 
-/* 电压点位置 */
+/* 电压点节点槽 */
 .ref-field { flex-basis: 100%; }
-.ref-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.pt-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.pt-row .ref-select { flex-shrink: 0; }
-.pt-v { flex: 1; min-width: 100px; }
-.pt-del { flex-shrink: 0; width: 28px; }
-.pt-add { align-self: flex-start; }
-.ref-select {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--cyan);
-  background: var(--bg-deep);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 8px;
-  outline: none;
-}
-.ref-select.invalid { border-color: #ff5c5c; color: #ff5c5c; }
 .ref-hint {
   font-size: 11px;
   color: var(--dim);
   margin-top: 4px;
   line-height: 1.5;
+}
+.node-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 2px;
+}
+.node-slot.gnd { padding-bottom: 10px; }
+.node-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-deep);
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.node-btn:hover {
+  border-color: var(--cyan-dim);
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+.node-btn.on {
+  border-color: var(--neon);
+  color: var(--neon);
+  background: rgba(0, 255, 159, 0.12);
+  box-shadow: var(--glow-green);
+}
+.node-dot {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.node-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.node-slot .pt-v {
+  flex: 1;
+  min-width: 100px;
+  max-width: 180px;
 }
 
 /* 待求电阻输入框 + 「算」按钮 */

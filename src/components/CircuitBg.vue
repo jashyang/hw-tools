@@ -63,7 +63,7 @@
 .circuit-bg {
   position: fixed;
   inset: 0;
-  z-index: -2;
+  z-index: -1;
   pointer-events: none;
   overflow: hidden;
 }
@@ -73,13 +73,13 @@
 }
 .trace {
   fill: none;
-  stroke: rgba(0, 255, 159, 0.07);
-  stroke-width: 0.5;
+  stroke: rgba(0, 255, 159, 0.16);
+  stroke-width: 0.7;
   stroke-dasharray: 1.6 1.8;
   animation: trace-flow 2.4s linear infinite;
 }
 .trace.dim {
-  stroke: rgba(0, 229, 255, 0.05);
+  stroke: rgba(0, 229, 255, 0.12);
   animation-duration: 3.2s;
 }
 /* 虚线流动 = 电流在导线里跑 */
@@ -89,35 +89,35 @@
 /* 电流脉冲：短亮线沿走线循环流动 */
 .pulse-bar {
   fill: none;
-  stroke-width: 0.9;
+  stroke-width: 1.4;
   stroke-linecap: round;
-  stroke: rgba(0, 255, 159, 0.5);
-  stroke-dasharray: 0.8 150;
-  filter: drop-shadow(0 0 2px #00ff9f);
+  stroke: rgba(0, 255, 159, 0.85);
+  stroke-dasharray: 1.2 150;
+  filter: drop-shadow(0 0 3px #00ff9f);
   animation: pulse-travel 6s linear infinite;
 }
 .pulse-bar.cyan {
-  stroke: rgba(0, 229, 255, 0.45);
-  filter: drop-shadow(0 0 2px #00e5ff);
+  stroke: rgba(0, 229, 255, 0.8);
+  filter: drop-shadow(0 0 3px #00e5ff);
   animation-duration: 8s;
   animation-delay: -2s;
 }
 @keyframes pulse-travel {
   0% { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: -150.8; }
+  100% { stroke-dashoffset: -151.2; }
 }
 /* 光点：脉冲式亮灭（像示波器脉冲波） */
 .pulse {
-  filter: drop-shadow(0 0 1.5px #00ff9f);
+  filter: drop-shadow(0 0 2.5px #00ff9f);
 }
 .pulse.cyan {
-  filter: drop-shadow(0 0 1.5px #00e5ff);
+  filter: drop-shadow(0 0 2.5px #00e5ff);
 }
 .node {
   animation: node-blink 2.4s ease-in-out infinite;
 }
 @keyframes node-blink {
-  0%, 100% { opacity: 0.25; }
+  0%, 100% { opacity: 0.3; }
   50% { opacity: 1; }
 }
 </style>
