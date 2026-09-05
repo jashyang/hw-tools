@@ -2,10 +2,20 @@
 import CalcForm from '../components/CalcForm.vue'
 import ResistorCalc from '../components/ResistorCalc.vue'
 import FlybackCalc from '../components/FlybackCalc.vue'
+import { computed } from 'vue'
 
-defineProps({
+const props = defineProps({
   scene: { type: Object, required: true },
 })
+
+const isFlyback = computed(() => props.scene.id === 'flyback')
+const formulaText = computed(() => isFlyback.value ? '公式说明' : (props.scene.formula || ''))
+
+function onFormulaBar() {
+  if (isFlyback.value) {
+    document.dispatchEvent(new CustomEvent('hwtools:open-formula'))
+  }
+}
 </script>
 
 <template>
@@ -15,7 +25,7 @@ defineProps({
       <span class="scene-name">{{ scene.name }}</span>
       <span class="scene-desc">{{ scene.desc }}</span>
     </div>
-    <div class="formula-bar"><span class="prompt">$</span> {{ scene.formula }}</div>
+    <div class="formula-bar" @click="onFormulaBar" :title="isFlyback ? '点击查看公式说明' : ''"><span class="prompt">?</span> {{ formulaText }}</div>
     <div class="panel calc-panel">
       <div v-if="scene.component !== 'flyback'" class="section-title">输入参数</div>
       <!-- 自定义组件优先 -->
@@ -66,6 +76,10 @@ defineProps({
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: default;
+}
+.formula-bar[title] {
+  cursor: pointer;
 }
 .formula-bar .prompt {
   color: var(--neon);
