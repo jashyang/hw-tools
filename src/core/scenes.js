@@ -1,4 +1,5 @@
 // ── 场景定义：表单字段 + 求解逻辑（留空即所求） ──
+import FlybackCalc from '../components/FlybackCalc.vue'
 import {
   parseResistor, formatOhms,
   parseVolt, formatVolt,
@@ -126,8 +127,18 @@ export const rc = {
   },
 }
 
+// ── 反激式变压器设计 ──
+export const flyback = {
+  id: 'flyback',
+  name: '变压器设计',
+  icon: '🔌',
+  desc: '反激式变压器电磁设计：磁芯选型 · 绕组计算 · CCM/DCM 对比',
+  formula: 'Np = V·D / (ΔB·Ae·f)',
+  component: 'flyback',
+}
+
 // ── 场景注册表 ──
-export const scenes = [resistor, power, rc]
+export const scenes = [resistor, power, rc, flyback]
 
 // ── 分类结构（大类 → 小类） ──
 export const CATEGORIES = [
@@ -142,6 +153,12 @@ export const CATEGORIES = [
     name: '电容与时间',
     icon: '⏱',
     items: ['rc'],
+  },
+  {
+    id: 'flyback',
+    name: '开关电源',
+    icon: '🔌',
+    items: ['flyback'],
   },
 ]
 
