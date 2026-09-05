@@ -133,7 +133,6 @@ export const flyback = {
   name: '变压器设计',
   icon: '🔌',
   desc: '反激式变压器电磁设计：磁芯选型 · 绕组计算 · CCM/DCM 对比',
-  formula: 'Np = V·D / (ΔB·Ae·f)',
   component: 'flyback',
 }
 
