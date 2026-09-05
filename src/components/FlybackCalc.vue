@@ -481,9 +481,8 @@ function toggleSteps() {
       </div>
     </div>
 
-    <!-- 公式推导入口（纯文字，与计算无关） -->
+    <!-- 计算按钮 -->
     <button class="btn cyan calc-btn" @click="compute">⚡ 计算</button>
-    <span class="formula-link" @click="toggleSteps">{{ showSteps ? '▲ 收起公式推导' : '📐 查看公式推导' }}</span>
 
     <!-- 错误提示 -->
     <div v-if="error" class="result-error">⚠ {{ error }}</div>
@@ -567,6 +566,9 @@ function toggleSteps() {
         </table>
       </div>
 
+      <!-- 公式说明入口（可点击） -->
+      <span class="formula-link-section" @click="toggleSteps">─── 公式说明 ───</span>
+
       <!-- 复制按钮 -->
       <button class="btn cyan copy-btn" @click="copyResult">{{ copied ? '✓ 已复制' : '⧉ 复制定案数据' }}</button>
     </div>
@@ -622,19 +624,19 @@ function toggleSteps() {
   margin: 6px 0;
 }
 
-/* ── 公式推导文字链接 ── */
-.formula-link {
-  display: inline;
+/* ── 公式说明可点击分隔线 ── */
+.formula-link-section {
+  display: block;
+  text-align: center;
   color: var(--cyan);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
-  padding: 0;
-  border: none;
-  background: transparent;
-  margin-left: 12px;
+  letter-spacing: 4px;
+  padding: 10px 0 6px;
+  opacity: 0.7;
 }
-.formula-link:hover {
-  text-decoration: underline;
+.formula-link-section:hover {
+  opacity: 1;
   color: var(--neon);
 }
 
