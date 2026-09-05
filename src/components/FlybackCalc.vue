@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import cores from '../core/data/cores.json'
 import materials from '../core/data/materials.json'
 import awgTable from '../core/data/awg.json'
