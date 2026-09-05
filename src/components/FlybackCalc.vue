@@ -21,9 +21,12 @@ const vo = ref('12')
 const io = ref('2')
 const fs = ref('65')
 const eta = ref('87')
-const coreMaterial = ref('PC40')
-const dBmax = ref('0.20')
 const vorTarget = ref('120')
+const coreMaterial = ref('PC40')
+const dBmax = ref(0.20)
+const showSteps = ref(false)
+const dBmaxDefault = computed(() => { const m = materials[coreMaterial.value]; return m ? m.deltaBDyn : 0.20 })
+watch(coreMaterial, () => { dBmax.value = dBmaxDefault.value })
 const diodeType = ref('schottky')
 const preferredMode = ref('auto') // auto | ccm | dcm
 
@@ -91,8 +94,6 @@ function compute() {
   // 实际反射电压
   const VorActual = VsecTotal * nActual
   const DmaxActual = VorActual / (VdcMin + VorActual)
-
-  // ── CCM 方案 ──
   // 临界电感
   const Lcrit = (nActual * nActual * Vo * Vo * (1 - DmaxActual)) / (2 * Pout * Fs)
   // CCM模式取Lp = 1.5 * Lcrit
@@ -163,6 +164,14 @@ function compute() {
     conclusion = IpkCCM < IpkDCM * 0.6 ? '✅ 锁定 CCM：峰值电流低、热耗小，优于DCM' : '✅ 锁定 DCM：参数适合断续模式'
   }
 
+  // ── 保存中间结果（用于步骤弹窗）──
+  stepData.value = {
+    vf, Pout, VdcMin, VsecTotal, n, Dmax, Ppri, Ae, Le,
+    NpMinRaw: NpMin, Km, NpReal, NsReal, nActual, VorActual, DmaxActual,
+    Lcrit, LpCCM, rCCM, ILavgPri, deltaICCMLp, IpkCCM, IspkCCM, IrmsCCM,
+    mu0, lg: lgCCMMm, LpDCM, VccMin: VdcMin, IpkDCM, IspkSecDCM,
+  }
+
   result.value = {
     input: { VinMin, VinMax, Vo, Io, Fs: parseFloat(fs.value), Eta: parseFloat(eta.value), coreMaterial, dBmax: DdB, vorTarget: VorT },
     derived: {
@@ -213,8 +222,68 @@ async function copyResult() {
 }
 
 const prevInputKey = ref('')
+// ── 中间结果（用于步骤显示）──
+const stepData = ref(null)
+
 function calcKey() {
   return `${vinMin.value}|${vinMax.value}|${vo.value}|${io.value}|${fs.value}|${eta.value}|${coreMaterial.value}|${dBmax.value}|${vorTarget.value}|${diodeType.value}`
+}
+
+function toggleSteps() {
+  if (!result.value && !stepData.value) return
+  showSteps.value = !showSteps.value
+}
+
+function getSteps() {
+  const r = result.value
+  if (!r || !stepData.value) return []
+  const s = stepData.value
+  const mat = materials[coreMaterial.value]
+  return [
+    { title: '① 基础参数', lines: [
+      `Pout = Vo × Io = ${r.input.Vo} × ${r.input.Io} = ${r.derived.Pout.toFixed(1)} W`,
+      `Ppri = Pout / η = ${r.derived.Pout.toFixed(1)} / ${(r.input.Eta).toFixed(0)}% = ${r.derived.Ppri.toFixed(3)} W`,
+      `Vdc(min) = Vin(min) × √2 = ${r.input.VinMin} × 1.414 ≈ ${r.derived.VdcMin.toFixed(1)} V`,
+    ]},
+    { title: '② 匝比与占空比初算', lines: [
+      `Vsec_total = Vo + Vf = ${r.input.Vo} + ${r.input.Vo > 0 ? s.vf : '?'} = ${r.derived.VsecTotal.toFixed(2)} V`,
+      `n = VOR_target / Vsec = ${s.vorT} / ${r.derived.VsecTotal.toFixed(2)} ≈ ${s.n.toFixed(3)}`,
+      `Dmax = VOR / (Vdc + VOR) = ${s.vorT} / (${r.derived.VdcMin.toFixed(1)} + ${s.vorT}) ≈ ${(s.Dmax * 100).toFixed(1)}%`,
+    ]},
+    { title: '③ 最小初级匝数（法拉第定律）', lines: [
+      `Np_min = Vdc·Dmax / (ΔB·Ae·f)`,
+      `        = ${r.derived.VdcMin.toFixed(1)} × ${(s.Dmax * 100).toFixed(1)}% / (${mat.deltaBDyn} × ${r.derived.Ae} × ${r.input.Fs}kHz)`,
+      `        = ${(s.NpMinRaw < 100 ? s.NpMinRaw.toFixed(1) : Math.ceil(s.NpMinRaw)).toFixed(1)} Turn`,
+      `工程裕量 K_m = 1.5 → Np_real = ceil(${s.NpMinRaw.toFixed(1)} × 1.5) = ${s.NpReal} T`,
+    ]},
+    { title: '④ 取整后重算（精确值）', lines: [
+      `Ns = round(Np / n) = round(${s.NpReal} / ${s.n.toFixed(3)}) = ${s.NsReal} T`,
+      `n_actual = ${s.NpReal} / ${s.NsReal} = ${s.nActual.toFixed(3)}`,
+      `VOR_actual = Vsec × n_actual = ${r.derived.VsecTotal.toFixed(2)} × ${s.nActual.toFixed(3)} = ${s.VorActual.toFixed(1)} V`,
+      `Dmax_actual = VOR' / (Vdc + VOR') = ${s.VorActual.toFixed(1)} / (${r.derived.VdcMin.toFixed(1)} + ${s.VorActual.toFixed(1)}) = ${(s.DmaxActual * 100).toFixed(1)}%`,
+    ]},
+    { title: '⑤ CCM 模式设计', lines: [
+      `Lcrit = n²·Vo²·(1-D) / (2·Pout·f)`,
+      `     = ${s.nActual.toFixed(3)}² × ${r.input.Vo}² × (1-${(s.DmaxActual * 100).toFixed(1)}%) / (2 × ${r.derived.Pout.toFixed(1)} × ${r.input.Fs}×10³)`,
+      `     = ${s.Lcrit.toFixed(2)} mH`,
+      `取 Lp = 1.5 × Lcrit = ${(s.LpCCM*1000).toFixed(2)} mH`,
+      `Iavg_pri = Ppri / (η·Vdc·D) = ${s.IpkCCM.toFixed(3)} A`,
+      `Ipk = Iavg + ΔI/2 = ${s.IpkCCM.toFixed(2)} A`,
+      `Irms = Ipk × √(D·(1+r²/3)) = ${s.IrmsCCM.toFixed(2)} A`,
+    ]},
+    { title: '⑥ DCM 模式设计（对比用）', lines: [
+      `Lp = Vin(min_DC)²·D² / (2·Ppri·f)`,
+      `   = ${s.VccMin.toFixed(1)}² × ${(s.DmaxActual * 100).toFixed(1)}%² / (2 × ${r.derived.Ppri.toFixed(3)} × ${r.input.Fs}×10³)`,
+      `   = ${s.LpDCM.toFixed(2)} mH`,
+      `Ipk = √(2·Ppri·f·Lp) / Vin = ${s.IpkDCM.toFixed(2)} A`,
+    ]},
+    { title: '⑦ 气隙长度 & 线径', lines: [
+      `lg = μ₀ · Np² · Ae / Lp (μ₀ = 4π×10⁻⁷ H/m)`,
+      `   = 4π×10⁻⁷ × ${s.NpReal}² × ${r.derived.Ae}×10⁻⁶ / ${(s.LpCCM).toFixed(6)}`,
+      `   ≈ ${s.lg.toFixed(2)} mm`,
+      `初 AWG≈${r.wire.priStrands[0]?.count ? '多股并绕' : '单股'}, 次级 ${r.wire.secAWG}`,
+    ]},
+  ]
 }
 </script>
 
@@ -223,7 +292,7 @@ function calcKey() {
     <!-- 输入表单 -->
     <div class="input-grid">
       <div class="field">
-        <label class="field-label"><span class="fname">输入电压 AC</span></label>
+        <label class="field-label"><span class="fname">输入交流电压 AC（有效值范围）</span></label>
         <div class="inline-pair">
           <input v-model="vinMin" type="text" inputmode="decimal" class="field-input sm" placeholder="下限 (V)" />
           <span class="dash">~</span>
@@ -231,7 +300,7 @@ function calcKey() {
         </div>
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">输出电压 / 电流</span></label>
+        <label class="field-label"><span class="fname">输出直流电压 / 电流（稳定负载值）</span></label>
         <div class="inline-pair">
           <input v-model="vo" type="text" inputmode="decimal" class="field-input sm" placeholder="Vo (V)" />
           <span class="slash">/</span>
@@ -239,29 +308,30 @@ function calcKey() {
         </div>
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">开关频率</span><span class="funit">kHz</span></label>
+        <label class="field-label"><span class="fname">开关频率 fs（kHz，越高→匝数越少、磁芯越小）</span></label>
         <input v-model="fs" type="text" inputmode="decimal" class="field-input sm" placeholder="如 65" />
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">预期效率</span><span class="funit">%</span></label>
+        <label class="field-label"><span class="fname">预期效率 η（%）</span></label>
         <input v-model="eta" type="text" inputmode="decimal" class="field-input sm" placeholder="如 87" />
       </div>
       <div class="field">
         <label class="field-label"><span class="fname">磁芯材质</span></label>
         <select v-model="coreMaterial" class="field-input sm">
-          <option v-for="(m,k) in materials" :key="k" :value="k">{{ k }} ({{ m.manufacturer }})</option>
+          <option v-for="(m,k) in materials" :key="k" :value="k">{{ k }}（{{ m.manufacturer }}，ΔB默认 {{ m.deltaBDyn }}T）</option>
         </select>
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">ΔBmax</span><span class="funit">T</span></label>
-        <input v-model="dBmax" type="text" inputmode="decimal" class="field-input sm" placeholder="如 0.20" />
+        <label class="field-label"><span class="fname">ΔBmax 磁通密度摆幅 T（按材质自动取值）</span></label>
+        <span class="db-readout">{{ dBmax.toFixed(2) }} T</span>
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">目标反射电压 VOR</span><span class="funit">V</span></label>
+        <label class="field-label"><span class="fname">目标反射电压 VOR（V，反激二次侧钳位，通常 90–150V；直接影响占空比）</span></label>
         <input v-model="vorTarget" type="text" inputmode="decimal" class="field-input sm" placeholder="如 120" />
       </div>
+      <div class="section-divider">─── 高级参数 ───</div>
       <div class="field">
-        <label class="field-label"><span class="fname">输出整流管</span></label>
+        <label class="field-label"><span class="fname">输出整流管（仅用于 VOR 精确值，影响极小）</span></label>
         <select v-model="diodeType" class="field-input sm">
           <option v-for="(p,k) in partsData" :key="k" :value="k">{{ p.label }}</option>
         </select>
@@ -284,6 +354,26 @@ function calcKey() {
 
     <!-- 结果区域 -->
     <div v-if="result">
+      <!-- 计算步骤按钮 -->
+      <button class="btn steps-toggle-btn" @click="toggleSteps">{{ showSteps ? '▲' : '📐' }} {{ showSteps ? '隐藏计算步骤' : '查看计算步骤' }}</button>
+
+      <!-- 步骤弹窗 -->
+      <Transition name="fade">
+        <div v-if="showSteps && result && stepData" class="modal-overlay" @click.self="showSteps = false">
+          <div class="modal-content">
+            <div class="modal-header">
+              <span>📐 计算推导步骤（代入实际数值）</span>
+              <button class="modal-close" @click="showSteps = false">✕</button>
+            </div>
+            <div class="modal-body">
+              <div v-for="(step, idx) in getSteps()" :key="idx" class="step-block">
+                <h4>{{ step.title }}</h4>
+                <pre class="step-lines">{{ step.lines.join('\n') }}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
       <!-- 警告信息 -->
       <div v-if="result.winding.warnings.length" class="warning-box">
         <div v-for="(w,i) in result.winding.warnings" :key="i" class="warn-item">{{ w }}</div>
@@ -378,6 +468,110 @@ function calcKey() {
 .conclusion-cell { writing-mode: vertical-rl; text-align: center; color: var(--neon); font-size: 12px; letter-spacing: 2px; }
 
 .copy-btn { margin-top: 12px; }
+
+/* ── dB 只读显示 ── */
+.db-readout {
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--cyan);
+  padding: 8px 0;
+}
+
+/* ── 高级参数分隔线 ── */
+.section-divider {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 4px;
+  opacity: 0.5;
+  margin: 6px 0;
+}
+
+/* ── 步骤按钮 ── */
+.steps-toggle-btn {
+  background: rgba(0,229,255,0.08);
+  border: 1px solid var(--cyan-dim);
+  font-size: 13px;
+}
+
+/* ── 弹窗 ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-content {
+  background: #1a1f2e;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-weight: bold;
+  color: var(--neon);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.modal-close:hover { color: var(--red); }
+
+.modal-body {
+  overflow-y: auto;
+  padding: 16px 20px;
+  flex: 1;
+}
+
+.step-block { margin-bottom: 18px; }
+.step-block:last-child { margin-bottom: 0; }
+
+.step-block h4 {
+  color: var(--cyan);
+  font-size: 13px;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.5px;
+}
+
+.step-lines {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: #c8d0dc;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ── 过渡动画 ── */
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 @media(max-width:700px) {
   .compare { font-size: 11px; }
