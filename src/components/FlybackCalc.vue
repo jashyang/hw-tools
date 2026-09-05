@@ -548,6 +548,7 @@ function toggleSteps() {
       <!-- 表二：核心设计定案 -->
       <div class="table-section">
         <h3 class="table-title">🔧 核心设计参数</h3>
+        <span class="formula-link-section" @click="toggleSteps" style="display:block;text-align:center;color:var(--cyan);font-size:12px;cursor:pointer;letter-spacing:4px;padding:6px 0 2px;opacity:0.7;">─── 公式说明 ───</span>
         <table class="data-table specs">
           <tbody>
             <tr><td class="dim">输出功率</td><td>{{ result.derived.Pout.toFixed(1) }} W</td></tr>
@@ -568,9 +569,6 @@ function toggleSteps() {
 
       <!-- 复制按钮 -->
       <button class="btn cyan copy-btn" @click="copyResult">{{ copied ? '✓ 已复制' : '⧉ 复制定案数据' }}</button>
-
-      <!-- 公式说明入口（可点击） -->
-      <span class="formula-link-section" @click="toggleSteps">─── 公式说明 ───</span>
     </div>
   </div>
 </template>
