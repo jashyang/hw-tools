@@ -487,29 +487,29 @@ function toggleSteps() {
     <!-- 计算按钮 -->
     <button class="btn cyan calc-btn" @click="compute">⚡ 计算</button>
 
+    <!-- 公式说明弹窗（必须在 v-if="result" 外，否则未计算时无法弹出） -->
+    <Transition name="fade">
+      <div v-if="showSteps" class="modal-overlay" @click.self="showSteps = false">
+        <div class="modal-content">
+          <div class="modal-header">
+            <span>📐 公式推导（为什么这个公式成立）</span>
+            <button class="modal-close" @click="showSteps = false">✕</button>
+          </div>
+          <div class="modal-body">
+            <div v-for="(step, idx) in steps" :key="idx" class="step-block">
+              <h4>{{ step.title }}</h4>
+              <pre class="step-lines">{{ step.lines.join('\n') }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 错误提示 -->
     <div v-if="error" class="result-error">⚠ {{ error }}</div>
 
     <!-- 结果区域 -->
     <div v-if="result">
-
-      <!-- 步骤弹窗 -->
-      <Transition name="fade">
-        <div v-if="showSteps" class="modal-overlay" @click.self="showSteps = false">
-          <div class="modal-content">
-            <div class="modal-header">
-              <span>📐 公式推导（为什么这个公式成立）</span>
-              <button class="modal-close" @click="showSteps = false">✕</button>
-            </div>
-            <div class="modal-body">
-              <div v-for="(step, idx) in steps" :key="idx" class="step-block">
-                <h4>{{ step.title }}</h4>
-                <pre class="step-lines">{{ step.lines.join('\n') }}</pre>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Transition>
       <!-- 警告信息 -->
       <div v-if="result.winding.warnings.length" class="warning-box">
         <div v-for="(w,i) in result.winding.warnings" :key="i" class="warn-item">{{ w }}</div>
