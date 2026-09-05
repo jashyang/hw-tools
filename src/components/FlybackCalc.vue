@@ -217,7 +217,6 @@ async function copyResult() {
 const prevInputKey = ref('')
 
 // ── 公式推导（静态文本，与计算结果无关）──
-const showSteps = ref(false)
 
 const steps = [
   {
