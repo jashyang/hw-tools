@@ -167,7 +167,7 @@ function compute() {
 
   // ── 保存中间结果（用于步骤弹窗）──
   stepData.value = {
-    vf, Pout, VdcMin, VsecTotal, n, Dmax, Ppri, Ae, Le,
+    Vf, Pout, VdcMin, VsecTotal, n, Dmax, Ppri, Ae, Le,
     NpMinRaw: NpMin, Km, NpReal, NsReal, nActual, VorActual, DmaxActual,
     Lcrit, LpCCM, rCCM, ILavgPri, deltaICCMLp, IpkCCM, IspkCCM, IrmsCCM,
     mu0, lg: lgCCMMm, LpDCM, VccMin: VdcMin, IpkDCM, IspkSecDCM,
