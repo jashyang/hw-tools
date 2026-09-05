@@ -1,6 +1,7 @@
 <script setup>
 import CalcForm from '../components/CalcForm.vue'
 import ResistorCalc from '../components/ResistorCalc.vue'
+import FlybackCalc from '../components/FlybackCalc.vue'
 
 defineProps({
   scene: { type: Object, required: true },
@@ -16,9 +17,10 @@ defineProps({
     </div>
     <div class="formula-bar"><span class="prompt">$</span> {{ scene.formula }}</div>
     <div class="panel calc-panel">
-      <div class="section-title">输入参数</div>
-      <!-- 自定义组件（如电阻计算）优先，其余走通用表单 -->
+      <div v-if="scene.component !== 'flyback'" class="section-title">输入参数</div>
+      <!-- 自定义组件优先 -->
       <ResistorCalc v-if="scene.component === 'resistor'" />
+      <FlybackCalc v-else-if="scene.component === 'flyback'" />
       <CalcForm v-else :scene="scene" />
     </div>
   </div>
