@@ -114,9 +114,10 @@ function compute() {
   const lgCCMMm = (mu0 * NpReal * NpReal * Ae) / LpCCM * 1000 // mm
 
   // ── DCM 方案 ──
+  const VccMin = VdcMin
   const LpDCM = (VccMin * VccMin * DmaxActual * DmaxActual) / (2 * Ppri * Fs)
   const deltaIDCMLp = (VorActual + Vo + Vf) * (1 - DmaxActual) * (LpDCM * Fs) / LpDCM // 这个不对...
-  // DCM: Ipri_pk = √(2 * Ppri * Fs * Lp) / (Vin_min_DC * D)  或
+  // DCM: Ipri_pk = √(2 * Ppri * Fs * Lp) / (Vin_min_DC * D) 或
   const IpkDCM = Math.sqrt(2 * Ppri * Fs * LpDCM) / VccMin
   const ILavgPriDCM = Ppri / (VccMin * DmaxActual)
   const IspkDCM = IpkDCM * nActual
