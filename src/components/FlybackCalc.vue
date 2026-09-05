@@ -431,9 +431,6 @@ onMounted(() => {
 
 <template>
   <div class="flyback-calc">
-    <!-- 公式说明按钮（输入区上方） -->
-    <button class="formula-link-btn" @click="showSteps = true">📐 公式说明</button>
-
     <!-- 输入表单 -->
     <div class="input-grid">
       <div class="field">
@@ -494,7 +491,7 @@ onMounted(() => {
     <!-- 计算按钮 -->
     <button class="btn cyan calc-btn" @click="compute">⚡ 计算</button>
 
-    <!-- 公式说明弹窗（必须在 v-if="result" 外，否则未计算时无法弹出） -->
+    <!-- 公式说明弹窗（必须在 v-if="result" 外，否则未计算时也能弹出） -->
     <Transition name="fade">
       <div v-if="showSteps" class="modal-overlay" @click.self="showSteps = false">
         <div class="modal-content">
@@ -611,27 +608,6 @@ onMounted(() => {
 .conclusion-cell { writing-mode: vertical-rl; text-align: center; color: var(--neon); font-size: 12px; letter-spacing: 2px; }
 
 .copy-btn { margin-top: 12px; }
-
-/* ── 公式说明按钮（输入区上方）── */
-.formula-link-btn {
-  display: block;
-  width: 100%;
-  padding: 8px 0;
-  background: transparent;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  color: var(--cyan);
-  font-size: 13px;
-  cursor: pointer;
-  letter-spacing: 2px;
-  opacity: 0.7;
-  transition: all 0.2s;
-}
-.formula-link-btn:hover {
-  opacity: 1;
-  color: var(--neon);
-  border-color: var(--neon);
-}
 
 /* ── dB 只读显示 ── */
 .db-readout {
