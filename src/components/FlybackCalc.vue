@@ -223,7 +223,7 @@ async function copyResult() {
 }
 
 const prevInputKey = ref('')
-// ── 中间结果（用于步骤显示）──
+// ── 中间结果（用于推导显示）──
 const stepData = ref(null)
 
 function calcKey() {
@@ -239,51 +239,203 @@ function getSteps() {
   const r = result.value
   if (!r || !stepData.value) return []
   const s = stepData.value
-  const mat = materials[coreMaterial.value]
   return [
-    { title: '① 基础参数', lines: [
-      `Pout = Vo × Io = ${r.input.Vo} × ${r.input.Io} = ${r.derived.Pout.toFixed(1)} W`,
-      `Ppri = Pout / η = ${r.derived.Pout.toFixed(1)} / ${(r.input.Eta).toFixed(0)}% = ${r.derived.Ppri.toFixed(3)} W`,
-      `Vdc(min) = Vin(min) × √2 = ${r.input.VinMin} × 1.414 ≈ ${r.derived.VdcMin.toFixed(1)} V`,
-    ]},
-    { title: '② 匝比与占空比初算', lines: [
-      `Vsec_total = Vo + Vf = ${r.input.Vo} + ${r.input.Vo > 0 ? s.vf : '?'} = ${r.derived.VsecTotal.toFixed(2)} V`,
-      `n = VOR_target / Vsec = ${s.vorT} / ${r.derived.VsecTotal.toFixed(2)} ≈ ${s.n.toFixed(3)}`,
-      `Dmax = VOR / (Vdc + VOR) = ${s.vorT} / (${r.derived.VdcMin.toFixed(1)} + ${s.vorT}) ≈ ${(s.Dmax * 100).toFixed(1)}%`,
-    ]},
-    { title: '③ 最小初级匝数（法拉第定律）', lines: [
-      `Np_min = Vdc·Dmax / (ΔB·Ae·f)`,
-      `        = ${r.derived.VdcMin.toFixed(1)} × ${(s.Dmax * 100).toFixed(1)}% / (${mat.deltaBDyn} × ${r.derived.Ae} × ${r.input.Fs}kHz)`,
-      `        = ${(s.NpMinRaw < 100 ? s.NpMinRaw.toFixed(1) : Math.ceil(s.NpMinRaw)).toFixed(1)} Turn`,
-      `工程裕量 K_m = 1.5 → Np_real = ceil(${s.NpMinRaw.toFixed(1)} × 1.5) = ${s.NpReal} T`,
-    ]},
-    { title: '④ 取整后重算（精确值）', lines: [
-      `Ns = round(Np / n) = round(${s.NpReal} / ${s.n.toFixed(3)}) = ${s.NsReal} T`,
-      `n_actual = ${s.NpReal} / ${s.NsReal} = ${s.nActual.toFixed(3)}`,
-      `VOR_actual = Vsec × n_actual = ${r.derived.VsecTotal.toFixed(2)} × ${s.nActual.toFixed(3)} = ${s.VorActual.toFixed(1)} V`,
-      `Dmax_actual = VOR' / (Vdc + VOR') = ${s.VorActual.toFixed(1)} / (${r.derived.VdcMin.toFixed(1)} + ${s.VorActual.toFixed(1)}) = ${(s.DmaxActual * 100).toFixed(1)}%`,
-    ]},
-    { title: '⑤ CCM 模式设计', lines: [
-      `Lcrit = n²·Vo²·(1-D) / (2·Pout·f)`,
-      `     = ${s.nActual.toFixed(3)}² × ${r.input.Vo}² × (1-${(s.DmaxActual * 100).toFixed(1)}%) / (2 × ${r.derived.Pout.toFixed(1)} × ${r.input.Fs}×10³)`,
-      `     = ${s.Lcrit.toFixed(2)} mH`,
-      `取 Lp = 1.5 × Lcrit = ${(s.LpCCM*1000).toFixed(2)} mH`,
-      `Iavg_pri = Ppri / (η·Vdc·D) = ${s.IpkCCM.toFixed(3)} A`,
-      `Ipk = Iavg + ΔI/2 = ${s.IpkCCM.toFixed(2)} A`,
-      `Irms = Ipk × √(D·(1+r²/3)) = ${s.IrmsCCM.toFixed(2)} A`,
-    ]},
-    { title: '⑥ DCM 模式设计（对比用）', lines: [
-      `Lp = Vin(min_DC)²·D² / (2·Ppri·f)`,
-      `   = ${s.VccMin.toFixed(1)}² × ${(s.DmaxActual * 100).toFixed(1)}%² / (2 × ${r.derived.Ppri.toFixed(3)} × ${r.input.Fs}×10³)`,
-      `   = ${s.LpDCM.toFixed(2)} mH`,
-      `Ipk = √(2·Ppri·f·Lp) / Vin = ${s.IpkDCM.toFixed(2)} A`,
-    ]},
-    { title: '⑦ 气隙长度 & 线径', lines: [
-      `lg = μ₀ · Np² · Ae / Lp (μ₀ = 4π×10⁻⁷ H/m)`,
-      `   = 4π×10⁻⁷ × ${s.NpReal}² × ${r.derived.Ae}×10⁻⁶ / ${(s.LpCCM).toFixed(6)}`,
-      `   ≈ ${s.lg.toFixed(2)} mm`,
-      `初 AWG≈${r.wire.priStrands[0]?.count ? '多股并绕' : '单股'}, 次级 ${r.wire.secAWG}`,
-    ]},
+    {
+      title: '① 能量守恒：输入功率',
+      lines: [
+        `反激变换器本质是一个隔离型 BUCK-BOOST，` ,
+        `开关管 ON 时储能于变压器漏感+原边电感，OFF 时释放到副边。`,
+        ``,
+        `根据能量守恒：`,
+        `  Ppri = Pout / η`,
+        `其中 η 包含开关损耗、铜损、铁损、二极管压降损耗等。`,
+        `最低输入电压时最恶劣——此时 D 最大、电流峰值最高。`,
+      ],
+    },
+    {
+      title: '② 匝比 n = VOR / Vsec —— 为什么这么定？',
+      lines: [
+        `反射电压 VOR 是开关管 OFF 时折算到原边的副边电压。`,
+        `由变压器同名端关系：`,
+        `  VOR / Vo' = Np / Ns = n   （Vo' = Vo + Vf，含二极管压降）`,
+        `所以 n = VOR / (Vo + Vf)。`,
+        ``,
+        `VOR 的选择权衡：`,
+        `  • 太高 → D 变小 → 占空比窗口窄，控制困难`,
+        `  • 太低 → D 变大 → 原边峰值电流升高 → MOSFET Rds(on) 损耗↑`,
+        `  • 同时 VOR 也决定 MOSFET 耐压：Vsw = Vin(max)√2 + VOR`,
+        `    例：265VAC → 375V + 120V = 495V → 选 600V MOSFET`,
+      ],
+    },
+    {
+      title: '③ 最大占空比 Dmax —— 从伏秒平衡推导',
+      lines: [
+        `稳态时变压器原边在一个周期内的净伏秒积为零（否则磁芯饱和）。`,
+        `ON 期间：V_Lp = Vdc，持续时间为 DTs`,
+        `OFF 期间：V_Lp = -VOR，持续时间为 (1-D)Ts`,
+        ``,
+        `伏秒平衡：`,
+        `  Vdc · DTs = VOR · (1-D)Ts`,
+        `  Vdc · D = VOR · (1-D)`,
+        `  Vdc · D + VOR · D = VOR`,
+        `  D(Vdc + VOR) = VOR`,
+        ``,
+        `  Dmax = VOR / (Vdc + VOR)`,
+        `最低 Vin 时 D 最大——这是最恶劣工况。`,
+      ],
+    },
+    {
+      title: '④ 法拉第定律 → Np 最小值',
+      lines: [
+        `法拉第电磁感应定律：`,
+        `  V = N · dΦ/dt = N · Ae · dB/dt`,
+        `对恒定电压 V 作用时间 t：`,
+        `  V · t = N · Ae · ΔB`,
+        ``,
+        `在 PWM 中，ON 时间 t_on = D/f = D·Ts，施加电压为 Vdc：`,
+        `  Vdc · (D/fs) = Np · Ae · ΔB`,
+        ``,
+        `  Np_min = Vdc · Dmax / (ΔB · Ae · fs)`,
+        ``,
+        `物理意义：Np 不足时，同样 V·t 下 ΔB 超标 → 磁芯进入饱和区 → `,
+        `μ 骤降 → 励磁电感崩塌 → 初级电流指数飙升 → MOSFET 炸机。`,
+        ``,
+        `工程中取 Np_real = ceil(Km × Np_min)，Km ≈ 1.5~1.8 留裕量。`,
+      ],
+    },
+    {
+      title: '⑤ 次级匝数 Ns 与取整效应',
+      lines: [
+        `理想匝比 n = Np/Ns，取整后实际匝比为有理数而非无理数：`,
+        `  Ns = round(Np / n)，n_actual = Np_real / Ns`,
+        ``,
+        `取整会引入误差——VOR 和 D 都要重新计算：`,
+        `  VOR_actual = (Vo + Vf) · n_actual`,
+        `  Dmax_actual = VOR_actual / (Vdc + VOR_actual)`,
+        `这就是为什么取整后要"回代"校验。`,
+      ],
+    },
+    {
+      title: '⑥ 临界电感 Lcrit —— CCM/DCM 的分界线',
+      lines: [
+        `当开关管再次导通瞬间，次级电流恰好降到零——这就是临界状态。`,
+        ``,
+        `次级电流下降斜率（OFF 期间）：`,
+        `  di/dt = Vo' / Lp_sec = (Vo + Vf) / (Lp/n²) = n²(Vo+Vf) / Lp`,
+        `下降时间 = (1-D)/fs，所以下降量：`,
+        `  ΔI_sec = n²(Vo+Vf)(1-D) / (Lp · fs)`,
+        ``,
+        `平均次级电流（忽略纹波）：`,
+        `  Isec_avg = Io / (1-D)`,
+        ``,
+        `临界条件：峰值 = 2 × 平均值（三角波）：`,
+        `  ΔI_sec/2 = Io / (1-D)`,
+        ``,
+        `整理得临界电感：`,
+        `  Lcrit = n²·(Vo+Vf)·(1-D) / (2·Io·fs)`,
+        `用 Pout = Vo·Io 替换 Io = Pout/Vo：`,
+        `  Lcrit = n²·Vo·(Vo+Vf)·(1-D) / (2·Pout·fs)`,
+        `由于 Vo ≈ Vo+Vf（Vf 较小），常近似为：`,
+        `  Lcrit ≈ n²·Vo²·(1-D) / (2·Pout·fs)`,
+        ``,
+        `Lp > Lcrit → CCM（连续，电流不降到零）`,
+        `Lp < Lcrit → DCM（断续，每个周期电流归零再充）`,
+        `Lp = Lcrit →临界 DCM（边界刚好归零）`,
+      ],
+    },
+    {
+      title: '⑦ CCM 模式：峰值/有效值电流推导',
+      lines: [
+        `CCM 下原边电流为三角波叠加直流偏置：`,
+        ``,
+        `平均原边电流（ON 期间导通）：`,
+        `  Ilp_avg = Ppri / (Vdc · D)    ← P = VI 的时域平均`,
+        ``,
+        `峰峰值纹波（三角波幅度）：`,
+        `  ΔIpp = Vdc · D / (Lp · fs)   ← V = L·di/dt 的微分形式`,
+        `定义纹波比 r = ΔIpp / Ilp_avg（通常取 0.3~0.4）：`,
+        `  ΔIpp = r · Ilp_avg`,
+        ``,
+        `峰值电流（波形最高点）：`,
+        `  Ipk = Ilp_avg + ΔIpp/2 = Ilp_avg · (1 + r/2)`,
+        ``,
+        `有效值（RMS，一个周期内发热等效）：`,
+        `  Irms = Ipk · √(D · (1 + r²/3))`,
+        `该式来自三角波 RMS 积分（on 期间有三角波，off 期间为零）。`,
+        ``,
+        `选择 Lp = (1.5~2) × Lcrit 的理由：`,
+        `  • 太接近 Lcrit → 对负载变化敏感，稍加重载就进 DCM`,
+        `  • 太大 → 开关频率固定但 ΔI↓ → 需要更大的 Np→ΔB↑ 或更大磁芯`,
+        `  • 1.5x 是兼顾动态响应和体积的折衷。`,
+      ],
+    },
+    {
+      title: '⑧ DCM 模式：峰值电流的平方根关系',
+      lines: [
+        `DCM 的能量传输是"批量"式的：每个周期充入固定能量然后释放完毕。`,
+        ``,
+        `一个周期的能量：`,
+        `  E_cycle = ½ · Lp · Ipk²`,
+        ``,
+        `功率 = 能量 × 频率：`,
+        `  Ppri = E_cycle · fs = ½ · Lp · Ipk² · fs`,
+        ``,
+        `反解峰值电流：`,
+        `  Ipk = √(2 · Ppri / (Lp · fs))`,
+        ``,
+        `DCM 的特性：`,
+        `  • 峰值电流与 Lp 成反比——电感越小，脉冲越尖`,
+        `  • 传导 EMI 更大（高频谐波丰富）`,
+        `  • 但控制环路更简单（右半平面零点问题不存在）`,
+        `  • 轻载效率高（没有 CCM 的续流损耗）`,
+        ``,
+        `所以小功率 (< 15W) 常见 DCM，大功率倾向 CCM。`,
+      ],
+    },
+    {
+      title: '⑨ 气隙长度 lg —— 为什么必须加气隙？',
+      lines: [
+        `无气隙铁氧体：μr ~ 2000，L 极大但极易饱和（ΔB 很小就饱和）。`,
+        ``,
+        `等效磁路：`,
+        `  ℜtotal = ℜcore + ℜgap = Le/(μ·μ₀·Ae) + lg/(μ₀·Ae)`,
+        `气隙 μr ≈ 1，远大于铁氧体 μr ~ 2000 的贡献，所以：`,
+        `  ℜtotal ≈ lg / (μ₀ · Ae)`,
+        ``,
+        `电感：`,
+        `  Lp = Np² / ℜtotal ≈ Np² · μ₀ · Ae / lg`,
+        ``,
+        `反解气隙：`,
+        `  lg = Np² · μ₀ · Ae / Lp`,
+        ``,
+        `物理意义：`,
+        `  • 气隙增加磁阻 → 降低有效电感 → 增大储能容量 (½LI²)`,
+        `  • 防止 ΔB 超限 → 避免饱和`,
+        `  • 但同时增大了漏感和边缘磁通 → 靠近气隙的线圈铜损显著上升（proximity effect）`,
+        ``,
+        `因此绕线时要注意：靠近气隙一侧用 P-S-P 三明治绕法`,
+        `（初级-绝缘-次级-绝缘-初级）以抵消漏磁场。`,
+      ],
+    },
+    {
+      title: '⑩ 导线截面积选择——电流密度经验法则',
+      lines: [
+        `导线选型原则：单位截面积的电流（电流密度 J）控制在合理范围。`,
+        ``,
+        `典型取值：`,
+        `  • 自然对流冷却：J = 3~4 A/mm²`,
+        `  • 强制风冷：J = 5~6 A/mm²`,
+        `  • PCB 走线：J = 10~20 A/mm²（散热好）`,
+        ``,
+        `所需截面积：`,
+        `  S = Irms / J`,
+        `查 AWG 表找 S ≤ 可用规格的最小 AWG 编号。`,
+        ``,
+        `如果线径太粗放不下，采用多股细线并绕：`,
+        `  N_strand = ceil(S_required / S_single)`,
+        `总截面积不变，但交流损耗略高（集肤效应减弱）。`,
+      ],
+    },
   ]
 }
 </script>
@@ -356,14 +508,14 @@ function getSteps() {
     <!-- 结果区域 -->
     <div v-if="result">
       <!-- 计算步骤按钮 -->
-      <button class="btn steps-toggle-btn" @click="toggleSteps">{{ showSteps ? '▲' : '📐' }} {{ showSteps ? '隐藏计算步骤' : '查看计算步骤' }}</button>
+      <button class="btn steps-toggle-btn" @click="toggleSteps">{{ showSteps ? '▲' : '📐' }} {{ showSteps ? '隐藏公式推导' : '查看公式推导' }}</button>
 
       <!-- 步骤弹窗 -->
       <Transition name="fade">
         <div v-if="showSteps && result && stepData" class="modal-overlay" @click.self="showSteps = false">
           <div class="modal-content">
             <div class="modal-header">
-              <span>📐 计算推导步骤（代入实际数值）</span>
+              <span>📐 公式推导（为什么这个公式成立）</span>
               <button class="modal-close" @click="showSteps = false">✕</button>
             </div>
             <div class="modal-body">
