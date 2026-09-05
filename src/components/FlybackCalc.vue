@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, watch } from 'vue'
+import { reactive, ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import cores from '../core/data/cores.json'
 import materials from '../core/data/materials.json'
 import awgTable from '../core/data/awg.json'
@@ -420,6 +420,13 @@ const steps = [
 function toggleSteps() {
   showSteps.value = !showSteps.value
 }
+
+// ── 响应 SceneView 顶部栏的公式说明点击 ──
+onMounted(() => {
+  function handleFormulaEvent() { showSteps.value = true }
+  window.addEventListener('hwtools:open-formula', handleFormulaEvent)
+  onUnmounted(() => { window.removeEventListener('hwtools:open-formula', handleFormulaEvent) })
+})
 </script>
 
 <template>
