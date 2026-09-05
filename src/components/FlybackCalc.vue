@@ -424,6 +424,9 @@ function toggleSteps() {
 
 <template>
   <div class="flyback-calc">
+    <!-- 公式说明按钮（输入区上方） -->
+    <button class="formula-link-btn" @click="showSteps = true">📐 公式说明</button>
+
     <!-- 输入表单 -->
     <div class="input-grid">
       <div class="field">
@@ -548,7 +551,6 @@ function toggleSteps() {
       <!-- 表二：核心设计定案 -->
       <div class="table-section">
         <h3 class="table-title">🔧 核心设计参数</h3>
-        <span class="formula-link-section" @click="toggleSteps" style="display:block;text-align:center;color:var(--cyan);font-size:12px;cursor:pointer;letter-spacing:4px;padding:6px 0 2px;opacity:0.7;">─── 公式说明 ───</span>
         <table class="data-table specs">
           <tbody>
             <tr><td class="dim">输出功率</td><td>{{ result.derived.Pout.toFixed(1) }} W</td></tr>
@@ -603,6 +605,27 @@ function toggleSteps() {
 
 .copy-btn { margin-top: 12px; }
 
+/* ── 公式说明按钮（输入区上方）── */
+.formula-link-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--cyan);
+  font-size: 13px;
+  cursor: pointer;
+  letter-spacing: 2px;
+  opacity: 0.7;
+  transition: all 0.2s;
+}
+.formula-link-btn:hover {
+  opacity: 1;
+  color: var(--neon);
+  border-color: var(--neon);
+}
+
 /* ── dB 只读显示 ── */
 .db-readout {
   font-family: var(--mono);
@@ -620,22 +643,6 @@ function toggleSteps() {
   letter-spacing: 4px;
   opacity: 0.5;
   margin: 6px 0;
-}
-
-/* ── 公式说明可点击分隔线 ── */
-.formula-link-section {
-  display: block;
-  text-align: center;
-  color: var(--cyan);
-  font-size: 13px;
-  cursor: pointer;
-  letter-spacing: 4px;
-  padding: 10px 0 6px;
-  opacity: 0.7;
-}
-.formula-link-section:hover {
-  opacity: 1;
-  color: var(--neon);
 }
 
 /* ── 弹窗 ── */
