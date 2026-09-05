@@ -481,9 +481,9 @@ function toggleSteps() {
       </div>
     </div>
 
-    <!-- 公式推导按钮（常驻可见，与计算无关） -->
+    <!-- 公式推导入口（纯文字，与计算无关） -->
     <button class="btn cyan calc-btn" @click="compute">⚡ 计算</button>
-    <button class="btn steps-toggle-btn" @click="toggleSteps">{{ showSteps ? '▲' : '📐' }} {{ showSteps ? '隐藏公式推导' : '查看公式推导' }}</button>
+    <span class="formula-link" @click="toggleSteps">{{ showSteps ? '▲ 收起公式推导' : '📐 查看公式推导' }}</span>
 
     <!-- 错误提示 -->
     <div v-if="error" class="result-error">⚠ {{ error }}</div>
@@ -622,11 +622,20 @@ function toggleSteps() {
   margin: 6px 0;
 }
 
-/* ── 步骤按钮 ── */
-.steps-toggle-btn {
-  background: rgba(0,229,255,0.08);
-  border: 1px solid var(--cyan-dim);
-  font-size: 13px;
+/* ── 公式推导文字链接 ── */
+.formula-link {
+  display: inline;
+  color: var(--cyan);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  border: none;
+  background: transparent;
+  margin-left: 12px;
+}
+.formula-link:hover {
+  text-decoration: underline;
+  color: var(--neon);
 }
 
 /* ── 弹窗 ── */
