@@ -37,6 +37,47 @@ export const power = {
     { key: 'i', label: '电流', unit: 'A', parse: parseAmp, fmt: formatAmp, ph: '如 500mA' },
     { key: 'r', label: '电阻', unit: 'Ω', parse: parseResistor, fmt: formatOhms, ph: '如 100' },
   ],
+  derivation: [
+    {
+      title: '① 基本定义：电功率 = 电压 × 电流',
+      lines: [
+        `电功率描述电能转化为热/光/运动的速率。`,
+        `电压 V 是单位电荷的能量（J/C），电流 I 是单位时间流过电荷量（C/s），`,
+        `两者相乘得到单位时间的能量（J/s = W）：`,
+        `  P = V · I`,
+      ],
+    },
+    {
+      title: '② 代入欧姆定律 V = IR → P = I²R',
+      lines: [
+        `纯电阻负载满足欧姆定律：V = I · R`,
+        `代入功率公式：`,
+        `  P = (I · R) · I = I² · R`,
+        `物理意义：电流流过电阻时发热——电流越大、电阻越大，发热越强。`,
+      ],
+    },
+    {
+      title: '③ 同理代入 I = V/R → P = V²/R',
+      lines: [
+        `从 V = IR 得 I = V / R，代入：`,
+        `  P = V · (V / R) = V² / R`,
+        `这解释了为什么高压输电用大电阻导线会浪费巨大功率。`,
+      ],
+    },
+    {
+      title: '④ 四者关系一览',
+      lines: [
+        `以上三个公式互推可得所有组合：`,
+        `  P = V·I   （已知电压、电流）`,
+        `  P = I²·R  （已知电流、电阻）`,
+        `  P = V²/R  （已知电压、电阻）`,
+        `反解：`,
+        `  V = √(P·R) = P/I`,
+        `  I = P/V = √(P/R)`,
+        `  R = V²/P = V/I = P/I²`,
+      ],
+    },
+  ],
   solve({ values }) {
     const p = val(values, 'p'), v = val(values, 'v'), i = val(values, 'i'), r = val(values, 'r')
     const known = { p, v, i, r }
@@ -98,6 +139,48 @@ export const rc = {
     { key: 'r', label: '电阻', unit: 'Ω', parse: parseResistor, fmt: formatOhms, ph: '如 10k' },
     { key: 'c', label: '电容', unit: 'F', parse: parseCap, fmt: formatCap, ph: '如 100uF' },
     { key: 't', label: '时间常数', unit: 's', parse: parseSec, fmt: formatSec, ph: '如 1s' },
+  ],
+  derivation: [
+    {
+      title: '① 什么是时间常数 τ？',
+      lines: [
+        `RC 电路（一个电阻 + 一个电容串联）充电或放电时`,
+        `电压不会突变——电容需要时间累积/释放电荷。`,
+        `时间常数 τ（tau）描述了这种"惯性"的大小：`,
+        `  τ = R × C`,
+        `单位：欧姆(Ω) × 法拉(F) = 秒(s)`,
+      ],
+    },
+    {
+      title: '② 充电过程：指数上升',
+      lines: [
+        `电容从 0 开始充电，电压随时间按指数律上升：`,
+        `  V(t) = V₀ · (1 - e^(-t/τ))`,
+        `其中 V₀ 是电源电压，e ≈ 2.718 是自然对数的底。`,
+        `代入 t = τ：`,
+        `  V(τ) = V₀ · (1 - 1/e) ≈ 0.632 · V₀`,
+        `即 1 个 τ 后达到最终值的 63.2%。`,
+      ],
+    },
+    {
+      title: '③ 关键时间点',
+      lines: [
+        `由于指数特性，理论上永远到不了 100%，但实际中：`,
+        `  1τ → 63.2%   （首次可测量到的变化量）`,
+        `  2τ → 86.5%`,
+        `  3τ → 95.0%   （工程上常认为"已充满"）`,
+        `  4τ → 98.2%`,
+        `  5τ → 99.3%   （视为完全充/放电完毕）`,
+      ],
+    },
+    {
+      title: '④ 反推 R 或 C',
+      lines: [
+        `已知 τ 和其中一个参数即可反推另一个：`,
+        `  R = τ / C`,
+        `  C = τ / R`,
+      ],
+    },
   ],
   solve({ values, emptyKeys }) {
     const r = val(values, 'r'), c = val(values, 'c'), t = val(values, 't')

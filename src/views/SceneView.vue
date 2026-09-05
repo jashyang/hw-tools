@@ -1,8 +1,9 @@
 <script setup>
+import { ref, computed } from 'vue'
 import CalcForm from '../components/CalcForm.vue'
 import ResistorCalc from '../components/ResistorCalc.vue'
 import FlybackCalc from '../components/FlybackCalc.vue'
-import { computed } from 'vue'
+import FormulaModal from '../components/FormulaModal.vue'
 
 const props = defineProps({
   scene: { type: Object, required: true },
@@ -11,10 +12,16 @@ const props = defineProps({
 const isFlyback = computed(() => props.scene.id === 'flyback')
 const formulaText = computed(() => isFlyback.value ? '公式说明' : (props.scene.formula || ''))
 
-function onFormulaBar() {
+// ── 通用公式弹窗（非 flyback 场景） ──
+const showModal = ref(false)
+
+async function openModal() {
   if (isFlyback.value) {
     document.dispatchEvent(new CustomEvent('hwtools:open-formula'))
+    return
   }
+  if (!props.scene.derivation) return
+  showModal.value = true
 }
 </script>
 
@@ -25,7 +32,9 @@ function onFormulaBar() {
       <span class="scene-name">{{ scene.name }}</span>
       <span class="scene-desc">{{ scene.desc }}</span>
     </div>
-    <div class="formula-bar" @click="onFormulaBar" :title="isFlyback ? '点击查看公式说明' : ''"><span class="prompt">?</span> {{ formulaText }}</div>
+    <div class="formula-bar" @click="openModal" :title="isFlyback ? '点击查看公式说明' : (scene.derivation ? '点击查看公式推导' : '')">
+      <span class="prompt">?</span> {{ formulaText }}
+    </div>
     <div class="panel calc-panel">
       <div v-if="scene.component !== 'flyback'" class="section-title">输入参数</div>
       <!-- 自定义组件优先 -->
@@ -33,6 +42,15 @@ function onFormulaBar() {
       <FlybackCalc v-else-if="scene.component === 'flyback'" />
       <CalcForm v-else :scene="scene" />
     </div>
+    <!-- 通用公式弹窗（非 flyback 场景有 derivation 时显示） -->
+    <Transition name="fade">
+      <FormulaModal
+        v-if="!isFlyback && showModal && scene.derivation"
+        :steps="scene.derivation"
+        :title="`${scene.name} · 公式推导`"
+        @close="showModal = false"
+      />
+    </Transition>
   </div>
 </template>
 
@@ -86,4 +104,12 @@ function onFormulaBar() {
   font-weight: 700;
 }
 .calc-panel { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+
+/* 公式弹窗淡入淡出动画 */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
 </style>
