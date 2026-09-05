@@ -566,11 +566,11 @@ function toggleSteps() {
         </table>
       </div>
 
-      <!-- 公式说明入口（可点击） -->
-      <span class="formula-link-section" @click="toggleSteps">─── 公式说明 ───</span>
-
       <!-- 复制按钮 -->
       <button class="btn cyan copy-btn" @click="copyResult">{{ copied ? '✓ 已复制' : '⧉ 复制定案数据' }}</button>
+
+      <!-- 公式说明入口（可点击） -->
+      <span class="formula-link-section" @click="toggleSteps">─── 公式说明 ───</span>
     </div>
   </div>
 </template>
