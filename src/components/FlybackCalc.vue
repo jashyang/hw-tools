@@ -443,11 +443,17 @@ onMounted(() => {
 
 <template>
   <div class="flyback-calc">
+    <!-- 标题行 + 计算按钮（与电阻计算一致：按钮在标题行右侧） -->
+    <div class="section-title calc-title">
+      <span>变压器设计参数</span>
+      <button class="btn cyan compute-btn title-btn" @click="compute">⚡ 计算</button>
+    </div>
+
     <!-- 输入表单 -->
     <div class="input-grid">
       <div class="group-label">输入 / 输出规格</div>
       <div class="field">
-        <label class="field-label"><span class="fname">输入交流电压 AC（有效值范围）</span></label>
+        <label class="field-label"><span class="fname">交流输入 AC（有效值）</span></label>
         <div class="inline-pair">
           <input v-model="vinMin" type="text" inputmode="decimal" class="field-input sm" placeholder="下限 (V)" />
           <span class="dash">~</span>
@@ -455,7 +461,7 @@ onMounted(() => {
         </div>
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">输出直流电压 / 电流（稳定负载值）</span></label>
+        <label class="field-label"><span class="fname">输出 Vo / Io</span></label>
         <div class="inline-pair">
           <input v-model="vo" type="text" inputmode="decimal" class="field-input sm" placeholder="Vo (V)" />
           <span class="slash">/</span>
@@ -465,7 +471,7 @@ onMounted(() => {
 
       <div class="group-label">工作参数</div>
       <div class="field">
-        <label class="field-label"><span class="fname">开关频率 fs（kHz，越高→匝数越少、磁芯越小）</span></label>
+        <label class="field-label"><span class="fname">开关频率 fs（kHz）</span></label>
         <input v-model="fs" type="text" inputmode="decimal" class="field-input sm" placeholder="如 65" />
       </div>
       <div class="field">
@@ -475,7 +481,7 @@ onMounted(() => {
 
       <div class="group-label">设计目标</div>
       <div class="field">
-        <label class="field-label"><span class="fname">目标反射电压 VOR（V，反激二次侧钳位，通常 90–150V；直接影响占空比）</span></label>
+        <label class="field-label"><span class="fname">目标反射电压 VOR（V）</span></label>
         <input v-model="vorTarget" type="text" inputmode="decimal" class="field-input sm" placeholder="如 120" />
       </div>
       <div class="field">
@@ -493,17 +499,10 @@ onMounted(() => {
         <HwSelect v-model="coreMaterial" :options="coreOptions" placeholder="选择磁芯材质" size="sm" />
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">ΔBmax 磁通密度摆幅 T（按材质自动取值）</span></label>
-        <span class="db-readout">{{ dBmax.toFixed(2) }} T</span>
-      </div>
-      <div class="field">
-        <label class="field-label"><span class="fname">输出整流管（仅用于 VOR 精确值，影响极小）</span></label>
+        <label class="field-label"><span class="fname">输出整流管</span></label>
         <HwSelect v-model="diodeType" :options="diodeOptions" placeholder="选择整流管" size="sm" />
       </div>
     </div>
-
-    <!-- 计算按钮 -->
-    <button class="btn cyan calc-btn" @click="compute">⚡ 计算</button>
 
     <!-- 公式说明弹窗（必须在 v-if="result" 外，否则未计算时也能弹出） -->
     <Transition name="fade">
@@ -606,6 +605,10 @@ onMounted(() => {
 .seg-btn.on { color: var(--cyan); background: rgba(79,138,168,0.14); }
 .sm { font-size: 16px !important; padding: 8px 10px !important; }
 
+/* ── 标题行 + 计算按钮（与电阻计算一致：按钮在右侧） ── */
+.calc-title { justify-content: space-between; }
+.title-btn { margin-left: auto; flex-shrink: 0; align-self: center; }
+
 /* ── 错误/警告 ── */
 .result-error { font-family: var(--mono); font-size: 12px; color: var(--red); padding: 8px; background: rgba(194,91,91,0.08); border-radius: 6px; }
 .warning-box { font-family: var(--mono); font-size: 12px; color: var(--amber); background: rgba(185,141,82,0.08); border-radius: 6px; padding: 8px 10px; }
@@ -622,14 +625,6 @@ onMounted(() => {
 .conclusion-cell { writing-mode: vertical-rl; text-align: center; color: var(--neon); font-size: 12px; letter-spacing: 2px; }
 
 .copy-btn { margin-top: 12px; }
-
-/* ── dB 只读显示 ── */
-.db-readout {
-  font-family: var(--mono);
-  font-size: 18px;
-  color: var(--cyan);
-  padding: 8px 0;
-}
 
 /* ── 分组标题（输入区整理布局） ── */
 .group-label {
