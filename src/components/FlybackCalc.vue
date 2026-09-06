@@ -445,6 +445,7 @@ onMounted(() => {
   <div class="flyback-calc">
     <!-- 输入表单 -->
     <div class="input-grid">
+      <div class="group-label">输入 / 输出规格</div>
       <div class="field">
         <label class="field-label"><span class="fname">输入交流电压 AC（有效值范围）</span></label>
         <div class="inline-pair">
@@ -461,6 +462,8 @@ onMounted(() => {
           <input v-model="io" type="text" inputmode="decimal" class="field-input sm" placeholder="Io (A)" />
         </div>
       </div>
+
+      <div class="group-label">工作参数</div>
       <div class="field">
         <label class="field-label"><span class="fname">开关频率 fs（kHz，越高→匝数越少、磁芯越小）</span></label>
         <input v-model="fs" type="text" inputmode="decimal" class="field-input sm" placeholder="如 65" />
@@ -469,6 +472,22 @@ onMounted(() => {
         <label class="field-label"><span class="fname">预期效率 η（%）</span></label>
         <input v-model="eta" type="text" inputmode="decimal" class="field-input sm" placeholder="如 87" />
       </div>
+
+      <div class="group-label">设计目标</div>
+      <div class="field">
+        <label class="field-label"><span class="fname">目标反射电压 VOR（V，反激二次侧钳位，通常 90–150V；直接影响占空比）</span></label>
+        <input v-model="vorTarget" type="text" inputmode="decimal" class="field-input sm" placeholder="如 120" />
+      </div>
+      <div class="field">
+        <label class="field-label"><span class="fname">工作模式偏好</span></label>
+        <div class="seg-group">
+          <button :class="{ on: preferredMode==='auto' }" @click="preferredMode='auto'" class="seg-btn">自动</button>
+          <button :class="{ on: preferredMode==='ccm' }" @click="preferredMode='ccm'" class="seg-btn">CCM</button>
+          <button :class="{ on: preferredMode==='dcm' }" @click="preferredMode='dcm'" class="seg-btn">DCM</button>
+        </div>
+      </div>
+
+      <div class="group-label">磁芯 / 材料 / 器件</div>
       <div class="field">
         <label class="field-label"><span class="fname">磁芯材质</span></label>
         <HwSelect v-model="coreMaterial" :options="coreOptions" placeholder="选择磁芯材质" size="sm" />
@@ -478,21 +497,8 @@ onMounted(() => {
         <span class="db-readout">{{ dBmax.toFixed(2) }} T</span>
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">目标反射电压 VOR（V，反激二次侧钳位，通常 90–150V；直接影响占空比）</span></label>
-        <input v-model="vorTarget" type="text" inputmode="decimal" class="field-input sm" placeholder="如 120" />
-      </div>
-      <div class="section-divider">─── 高级参数 ───</div>
-      <div class="field">
         <label class="field-label"><span class="fname">输出整流管（仅用于 VOR 精确值，影响极小）</span></label>
         <HwSelect v-model="diodeType" :options="diodeOptions" placeholder="选择整流管" size="sm" />
-      </div>
-      <div class="field">
-        <label class="field-label"><span class="fname">工作模式偏好</span></label>
-        <div class="seg-group">
-          <button :class="{ on: preferredMode==='auto' }" @click="preferredMode='auto'" class="seg-btn">自动</button>
-          <button :class="{ on: preferredMode==='ccm' }" @click="preferredMode='ccm'" class="seg-btn">CCM</button>
-          <button :class="{ on: preferredMode==='dcm' }" @click="preferredMode='dcm'" class="seg-btn">DCM</button>
-        </div>
       </div>
     </div>
 
@@ -625,15 +631,29 @@ onMounted(() => {
   padding: 8px 0;
 }
 
-/* ── 高级参数分隔线 ── */
-.section-divider {
+/* ── 分组标题（输入区整理布局） ── */
+.group-label {
   grid-column: 1 / -1;
-  text-align: center;
-  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
   font-size: 11px;
-  letter-spacing: 4px;
-  opacity: 0.5;
-  margin: 6px 0;
+  letter-spacing: 2px;
+  color: var(--dim);
+  text-transform: uppercase;
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(255,255,255,0.07);
+}
+.group-label::before {
+  content: '▸';
+  color: var(--neon);
+}
+.group-label:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 /* ── 弹窗 ── */

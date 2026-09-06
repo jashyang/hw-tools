@@ -69,9 +69,9 @@ body::after {
 
 /* ── 通用组件 ── */
 .panel {
-  background: linear-gradient(180deg, rgba(19, 27, 40, 0.42), rgba(15, 21, 31, 0.42));
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, rgba(19, 27, 40, 0.30), rgba(15, 21, 31, 0.27));
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
@@ -116,7 +116,7 @@ input[type='text'], input[type='number'], input[type='password'] {
   font-family: var(--mono);
   font-size: 14px;
   color: var(--neon);
-  background: rgba(6, 9, 15, 0.4);
+  background: rgba(6, 9, 15, 0.30);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   border: 1px solid var(--border);
@@ -319,7 +319,9 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
 /* ══════ PC 布局：侧栏 + 内容区 ══════ */
 .layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;      /* 移动端地址栏自适应 */
+  overflow: hidden;    /* 禁止整页滚动，右侧内容区单独滚动 */
 }
 
 /* 左侧分类导航（终端风格） */
@@ -328,9 +330,9 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(10, 14, 20, 0.72);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: rgba(10, 14, 20, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   border-right: 1px solid var(--border);
   padding: 16px 12px;
   position: sticky;
@@ -411,9 +413,11 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
 .main {
   flex: 1;
   min-width: 0;
-  padding: 16px 16px 32px;
+  min-height: 0;       /* 允许子元素收缩触发滚动 */
+  padding: 16px 16px 12px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;    /* 本身不滚动，由内部 scene-view 单独滚动 */
 }
 
 /* 终端状态栏 */
@@ -424,9 +428,9 @@ label { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spa
   font-family: var(--mono);
   font-size: 12px;
   color: var(--dim);
-  background: rgba(15, 21, 31, 0.5);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 21, 31, 0.34);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 12px;

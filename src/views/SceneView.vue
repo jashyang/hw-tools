@@ -60,6 +60,9 @@ async function openModal() {
   flex-direction: column;
   gap: 12px;
   flex: 1;
+  min-height: 0;          /* 允许收缩触发滚动 */
+  overflow-y: auto;       /* 右侧内容独立滚动，顶栏保持可见 */
+  padding-bottom: 8px;
 }
 .scene-head {
   display: flex;
@@ -84,9 +87,9 @@ async function openModal() {
   font-family: var(--mono);
   font-size: 13px;
   color: var(--cyan);
-  background: rgba(6, 9, 15, 0.5);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
+  background: rgba(6, 9, 15, 0.35);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   border: 1px solid var(--cyan-dim);
   border-radius: 8px;
   padding: 9px 14px;
