@@ -83,8 +83,12 @@ function compute() {
   const Pout = Vo * Io
   const VdcMin = VinMin * Math.sqrt(2)  // 最低直流母线电压
   const VsecTotal = Vo + Vf
-  const n = VorT / VsecTotal                 // 匝比
-  const Dmax = VorT / (VdcMin + VorT)         // 最大占空比
+  // ── 控制占空比 < 50%：最大占空比上限，VOR 联动钳位 ──
+  const DmaxCap = 0.48                         // 目标最大占空比（留裕量,<50%）
+  const VorCap = DmaxCap * VdcMin / (1 - DmaxCap)  // 对应的 VOR 上限
+  const VorEff = Math.min(VorT, VorCap)        // 实际采用的反射电压
+  const n = VorEff / VsecTotal                 // 匝比
+  const Dmax = VorEff / (VdcMin + VorEff)      // 最大占空比（≤ DmaxCap，<50%）
   const Ppri = Pout / Eta                    // 初级输入功率
 
   // 材料特性
@@ -166,6 +170,7 @@ function compute() {
 
   // 安全校验
   const warnings = []
+  if (VorT > VorCap) warnings.push(`⚠ 占空比控制(<50%)：目标 VOR ${VorT}V 会令占空比超 ${(DmaxCap * 100).toFixed(0)}%，已自动降为 ${VorEff.toFixed(0)}V（Dmax≈${(Dmax * 100).toFixed(1)}%）`)
   if (NpReal < NpMin) warnings.push('⚠ 警告：初级匝数不足，可能磁芯饱和！请增加匝数或换大磁芯')
   if (Pout > recommendedCore.maxPower) warnings.push(`⚠ 提示：功率 ${Pout.toFixed(1)}W 超过 ${recommendedCore.model} 的 ${recommendedCore.maxPower}W 推荐上限，建议换大一号磁芯`)
   if (Pout < 15 && designMode === 'ccm') warnings.push('💡 提示：小功率(<15W) 通常优先 DCM，控制更简单、无 RHP 零点')
