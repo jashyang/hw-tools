@@ -17,7 +17,7 @@ const showModal = ref(false)
 
 async function openModal() {
   if (isFlyback.value) {
-    document.dispatchEvent(new CustomEvent('hwtools:open-formula', { detail: { sceneId: 'flyback' } }))
+    window.dispatchEvent(new CustomEvent('hwtools:open-formula', { detail: { sceneId: 'flyback' } }))
     return
   }
   if (!props.scene.derivation) return

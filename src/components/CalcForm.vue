@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, watch } from 'vue'
+import { useCopy } from '../composables/useCopy.js'
 
 const props = defineProps({
   scene: { type: Object, required: true },
@@ -77,24 +78,12 @@ function buildResult() {
 // 输入变化 → 结果失效
 watch([inputs, listRows], () => { result.value = null }, { deep: true })
 
-// ── 复制结果 ──
-const copied = ref(false)
+// ── 复制结果（useCopy composable）──
+const { copied, copy } = useCopy()
 async function copyResult() {
   if (!result.value || result.value.error) return
   const lines = result.value.results.map((r) => `${r.label}: ${r.value}${r.note ? '（' + r.note + '）' : ''}`)
-  const text = `${props.scene.name}\n${lines.join('\n')}`
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
-    try { document.execCommand('copy') } catch { /* 忽略 */ }
-    ta.remove()
-  }
-  copied.value = true
-  setTimeout(() => (copied.value = false), 1500)
+  copy(`${props.scene.name}\n${lines.join('\n')}`)
 }
 
 function addRow() { listRows.push('') }

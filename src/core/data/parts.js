@@ -1,0 +1,11 @@
+export const partsData = {
+  schottky: { label: '肖特基二极管', Vf: 0.5, note: '低压输出首选，反向恢复快' },
+  fr107: { label: 'FR107', Vf: 1.0, note: '通用快恢复，1A/1000V' },
+  uf4007: { label: 'UF4007', Vf: 1.1, note: '整流用快恢复，1A/1000V' },
+  mbrf20100ct: { label: 'MBRF20100CT', Vf: 0.55, note: 'TO-220封装大电流肖特基，20A/100V' },
+  mosfet_100v: { label: 'MOSFET 100V', vds: 100, note: '低压侧，反射电压低时可选' },
+  mosfet_200v: { label: 'MOSFET 200V', vds: 200, note: '中高压，VOR~120V时的常见选择' },
+  mosfet_500v: { label: 'MOSFET 500V', vds: 500, note: '高压侧通用' },
+  mosfet_600v: { label: 'MOSFET 600V', vds: 600, note: '通用高压侧，最常用规格' },
+  mosfet_650v: { label: 'MOSFET 650V', vds: 650, note: '安全裕量更高' }
+}

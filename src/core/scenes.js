@@ -1,5 +1,4 @@
 // ── 场景定义：表单字段 + 求解逻辑（留空即所求） ──
-import FlybackCalc from '../components/FlybackCalc.vue'
 import {
   parseResistor, formatOhms,
   parseVolt, formatVolt,

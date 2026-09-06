@@ -1,19 +1,14 @@
 <script setup>
-import { reactive, ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import cores from '../core/data/cores.json'
-import materials from '../core/data/materials.json'
-import awgTable from '../core/data/awg.json'
-import partsData from '../core/data/parts.json'
-import stdValuesRaw from '../core/data/stdvalues.json'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { materials } from '../core/data/materials.js'
+import { partsData } from '../core/data/parts.js'
+import { computeFlyback } from '../core/flyback-engine.js'
+import { flybackDerivation } from '../core/derivations.js'
+import { useCopy } from '../composables/useCopy.js'
 import HwSelect from './HwSelect.vue'
 
-// ── 标准电感值展平（E12+E24 按数量级排列）──
-const STD_BASE = [1.0, 1.1, 1.2, 1.3, 1.5, 1.6, 1.8, 2.0, 2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.3, 4.7, 5.1, 5.6, 6.2, 6.8, 7.5, 8.2, 9.1]
-const STDLIB = []
-for (const mag of [-3, -2, -1, 0, 1, 2, 3]) {
-  const mult = Math.pow(10, mag)
-  for (const v of STD_BASE) STDLIB.push({ raw: v * mult, label: `${v.toFixed(v >= 10 ? 0 : 1)}${mag < 0 ? 'mH' : ''}${mag === 0 ? 'µH' : mag > 0 ? 'mH' : ''}` })
-}
+// 公式推导（单一来源：core/derivations.js）
+const steps = flybackDerivation
 
 // ── 输入状态 ──
 const vinMin = ref('85')
@@ -39,186 +34,32 @@ const coreOptions = computed(() =>
   }))
 )
 const diodeOptions = computed(() =>
-  Object.entries(partsData).map(([key, p]) => ({ value: key, label: p.label }))
+  // 整流管下拉只保留真正的整流二极管（有 Vf 的），排除混入的 MOSFET
+  Object.entries(partsData)
+    .filter(([, p]) => typeof p.Vf === 'number' && p.Vf > 0)
+    .map(([key, p]) => ({ value: key, label: p.label }))
 )
 
 // ── 计算结果 ──
 const result = ref(null)
 const error = ref('')
-const copied = ref(false)
 
-// ── 工具函数 ──
-function getPart(type) { return partsData[type] || null }
-function findMaterial(mat) { return materials[mat] || materials['PC40'] }
-function findClosestStd(value) {
-  if (value <= 0 || !isFinite(value)) return null
-  let best = STDLIB[0], bestD = Math.abs(Math.log(value / STDLIB[0].raw))
-  for (const s of STDLIB) { const d = Math.abs(Math.log(value / s.raw)); if (d < bestD) { best = s; bestD = d } }
-  return best
-}
-
-// ── 磁芯自动推荐 ──
-function recommendCore(pOut) {
-  const P = pOut
-  for (const c of cores) if (c.maxPower >= P * 1.2) return c
-  return cores[cores.length - 1]
-}
-
-// ── 核心计算引擎 ──
+// ── 核心计算（引擎在 core/flyback-engine.js）──
 function compute() {
   error.value = ''
-  // 解析输入
-  const VinMin = parseFloat(vinMin.value), VinMax = parseFloat(vinMax.value)
-  const Vo = parseFloat(vo.value), Io = parseFloat(io.value)
-  const Fs = parseFloat(fs.value) * 1e3      // kHz→Hz [修复：×1000]
-  const Eta = parseFloat(eta.value) / 100     // %→小数
-  const DdB = parseFloat(dBmax.value)
-  const VorT = parseFloat(vorTarget.value)
-  const diode = getPart(diodeType.value)
-
-  if (!diode || isNaN(VinMin) || isNaN(VinMax) || isNaN(Vo) || isNaN(Io) || isNaN(Fs) || isNaN(Eta) || isNaN(DdB) || isNaN(VorT)) {
-    error.value = '请填写所有字段，检查格式是否正确'; result.value = null; return
-  }
-  const Vf = diode.Vf
-  const Pout = Vo * Io
-  const VdcMin = VinMin * Math.sqrt(2)  // 最低直流母线电压
-  const VsecTotal = Vo + Vf
-  // ── 控制占空比 < 50%：最大占空比上限，VOR 联动钳位 ──
-  const DmaxCap = 0.48                         // 目标最大占空比（留裕量,<50%）
-  const VorCap = DmaxCap * VdcMin / (1 - DmaxCap)  // 对应的 VOR 上限
-  const VorEff = Math.min(VorT, VorCap)        // 实际采用的反射电压
-  const n = VorEff / VsecTotal                 // 匝比
-  const Dmax = VorEff / (VdcMin + VorEff)      // 最大占空比（≤ DmaxCap，<50%）
-  const Ppri = Pout / Eta                    // 初级输入功率
-
-  // 材料特性
-  const mat = findMaterial(coreMaterial.value)
-  // 自动选磁芯：按Pout*1.2留裕量
-  let recommendedCore = recommendCore(Pout)
-  const Ae = recommendedCore.Ae / 1e6        // mm²→m²
-  const Le = recommendedCore.Le              // mm
-
-  // 最小初级匝数（法拉第定律，防饱和）
-  const NpMin = (VdcMin * Dmax) / (DdB * Ae * Fs)
-  // 工程裕量系数 K_m = 1.5~1.8
-  const Km = 1.5
-  const NpReal = Math.ceil(NpMin * Km)
-  // 次级匝数（取整）
-  const NsReal = Math.round(NpReal / n)
-  // 实际匝比
-  const nActual = NpReal / NsReal
-  // 实际反射电压
-  const VorActual = VsecTotal * nActual
-  const DmaxActual = VorActual / (VdcMin + VorActual)
-  // 边界临界电感（CCM/DCM 分界）[修复：补上 (1-D)²]
-  const Lcrit = (nActual * nActual * Vo * Vo * (1 - DmaxActual) * (1 - DmaxActual)) / (2 * Pout * Fs)
-  const LcritLabel = findClosestStd(Lcrit)?.label ?? `${(Lcrit * 1000).toFixed(1)}mH`
-
-  // ── CCM 参数 ──
-  const rCCM = 0.35                            // 纹波比 r = ΔI/ILavg
-  const LpCCM = 1.5 * Lcrit
-  const ILavgPriCCM = Pout / (Eta * VdcMin * DmaxActual)
-  const IpkCCM = ILavgPriCCM * (1 + rCCM / 2)          // 峰值 = 平均×(1+r/2)
-  const IrmsCCM = IpkCCM * Math.sqrt(DmaxActual * (1 + rCCM * rCCM / 3))
-  const IspkSecCCM = IpkCCM * nActual                  // 次级峰值 = n×初级峰值
-  const ILavgSecCCM = Io / (1 - DmaxActual)
-
-  // ── DCM 参数 ──
-  const LpDCM = (VdcMin * VdcMin * DmaxActual * DmaxActual) / (2 * Ppri * Fs)
-  const IpkDCM = Math.sqrt(2 * Ppri / (LpDCM * Fs))    // [修复] 峰值 = √(2P/(Lp·fs))
-  const IrmsDCM = IpkDCM * Math.sqrt(DmaxActual / 3)   // DCM 三角波有效值（占空比 D）
-  const IspkSecDCM = IpkDCM * nActual                  // [修复] 次级峰值 = n×初级峰值
-
-  // ── 模式决策：按功率档位，而非峰值电流比 ──
-  const prefer = preferredMode.value
-  const modeRcmd = Pout < 15 ? 'dcm' : 'ccm'           // <15W→DCM，≥15W→CCM（经验）
-  const designMode = prefer === 'auto' ? modeRcmd : prefer
-
-  const isCCM = designMode === 'ccm'
-  const Lp = isCCM ? LpCCM : LpDCM
-  const LpLabel = isCCM
-    ? (findClosestStd(LpCCM)?.label ?? `${(LpCCM * 1000).toFixed(1)}mH`)
-    : (findClosestStd(LpDCM)?.label ?? `${(LpDCM * 1000).toFixed(1)}mH`)
-  const IpK = isCCM ? IpkCCM : IpkDCM
-  const IrmS = isCCM ? IrmsCCM : IrmsDCM
-  const IsPk = isCCM ? IspkSecCCM : IspkSecDCM
-
-  // 气隙（跟随选定模式的 Lp）
-  const mu0 = 4 * Math.PI * 1e-7
-  const lgMm = (mu0 * NpReal * NpReal * Ae) / Lp * 1000 // mm
-
-  // 导线选型（跟随选定模式）
-  function suggestAWG(currentA) {
-    for (const a of awgTable) { if (a.currentA >= currentA * 1.3) return a }
-    return awgTable[awgTable.length - 1]
-  }
-  function findWireByArea(targetArea) {
-    for (let i = awgTable.length - 1; i >= 0; i--) {
-      if (awgTable[i].areaMm2 <= targetArea) return awgTable[i]
-    }
-    return awgTable[0]
-  }
-  function parallelStrands(areaNeeded, singleArea) {
-    if (singleArea >= areaNeeded * 0.8) return [{ awg: findWireByArea(singleArea).awg, count: 1 }]
-    let count = Math.min(Math.ceil(areaNeeded / singleArea), 8) // 最多8股
-    return [{ ...findWireByArea(singleArea * count), count }]
-  }
-  const priAWG = suggestAWG(IrmS * 1.1)
-  const secAWG = suggestAWG(IsPk * 0.5)
-  const priStrands = parallelStrands(IrmS * 1.1 / 4, priAWG.areaMm2)
-  const secStrands = parallelStrands(IsPk * 0.5 / 4, secAWG.areaMm2)
-
-  // 安全校验
-  const warnings = []
-  if (VorT > VorCap) warnings.push(`⚠ 占空比控制(<50%)：目标 VOR ${VorT}V 会令占空比超 ${(DmaxCap * 100).toFixed(0)}%，已自动降为 ${VorEff.toFixed(0)}V（Dmax≈${(Dmax * 100).toFixed(1)}%）`)
-  if (NpReal < NpMin) warnings.push('⚠ 警告：初级匝数不足，可能磁芯饱和！请增加匝数或换大磁芯')
-  if (Pout > recommendedCore.maxPower) warnings.push(`⚠ 提示：功率 ${Pout.toFixed(1)}W 超过 ${recommendedCore.model} 的 ${recommendedCore.maxPower}W 推荐上限，建议换大一号磁芯`)
-  if (Pout < 15 && designMode === 'ccm') warnings.push('💡 提示：小功率(<15W) 通常优先 DCM，控制更简单、无 RHP 零点')
-  if (Pout > 20 && designMode === 'dcm') warnings.push('💡 提示：较大功率(>20W) 用 DCM 峰值/有效值电流偏高，建议 CCM')
-
-  // ── 结论/推荐说明（按功率档位，不按峰值比） ──
-  let conclusion = ''
-  if (prefer === 'auto') {
-    conclusion = isCCM
-      ? `推荐 CCM —— ${Pout.toFixed(1)}W 属中功率(15~65W)，峰值电流低、发热小`
-      : `推荐 DCM —— ${Pout.toFixed(1)}W 属小功率(<15W)，控制简单、无右半平面零点`
-  } else {
-    conclusion = isCCM
-      ? `已选 CCM —— 峰值低、发热小；需 RCD 钳位，控制建议留 RHP 零点补偿`
-      : `已选 DCM —— 控制简单、动态快；峰值电流高、EMI 偏大`
-  }
-
-  result.value = {
-    input: { VinMin, VinMax, Vo, Io, Eta: parseFloat(eta.value), coreMaterial, dBmax: DdB, vorTarget: VorT },
-    derived: {
-      VdcMin, VsecTotal, n, nActual, Dmax, DmaxActual, Ppri, Pout,
-      coreModel: recommendedCore.model, materialName: `${coreMaterial.value}(${mat.manufacturer})`,
-      Ae: recommendedCore.Ae, AeLe: recommendedCore.AeLe, Ve: recommendedCore.Ve,
-      Le: recommendedCore.Le,
-      Lcrit, LcritLabel, mode: designMode,
-    },
-    winding: {
-      NpMin: Math.floor(NpMin), Np: NpReal, Ns: NsReal, nActual,
-      VorActual,
-      lg: lgMm.toFixed(2),
-      warnings,
-    },
-    ccm: {
-      Lp: LpCCM, LpLabel: findClosestStd(LpCCM)?.label ?? `${(LpCCM * 1000).toFixed(1)}mH`,
-      Ipk: IpkCCM, Irms: IrmsCCM, secAvg: ILavgSecCCM, secPeak: IspkSecCCM,
-    },
-    dcm: {
-      Lp: LpDCM, LpLabel: findClosestStd(LpDCM)?.label ?? `${(LpDCM * 1000).toFixed(1)}mH`,
-      Ipk: IpkDCM, Irms: IrmsDCM, secPeak: IspkSecDCM,
-    },
-    design: {
-      mode: designMode, Lp, LpLabel, lg: lgMm.toFixed(2), Ipk: IpK, Irms: IrmS, IsPk,
-      priAWG: `AWG ${priAWG.awg}`, secAWG: `AWG ${secAWG.awg}`, priStrands, secStrands,
-    },
-    conclusion,
-  }
+  const res = computeFlyback({
+    vinMin: vinMin.value, vinMax: vinMax.value,
+    vo: vo.value, io: io.value,
+    fs: fs.value, eta: eta.value,
+    vorTarget: vorTarget.value, coreMaterial: coreMaterial.value,
+    dBmax: dBmax.value, diodeType: diodeType.value, preferredMode: preferredMode.value,
+  })
+  if (res.error) { error.value = res.error; result.value = null; return }
+  result.value = res
 }
 
+// ── 复制（useCopy composable）──
+const { copied, copy } = useCopy()
 async function copyResult() {
   if (!result.value) return
   const r = result.value
@@ -233,227 +74,7 @@ async function copyResult() {
     `Ipk=${r.design.Ipk.toFixed(2)}A / Irms=${r.design.Irms.toFixed(2)}A / 次级峰值Ispk=${r.design.IsPk.toFixed(2)}A`,
     ...r.winding.warnings,
   ]
-  const text = lines.join('\n')
-  try { await navigator.clipboard.writeText(text) } catch { /* fallback */ }
-  copied.value = true
-  setTimeout(() => (copied.value = false), 1500)
-}
-
-const prevInputKey = ref('')
-
-// ── 公式推导（静态文本，与计算结果无关）──
-
-const steps = [
-  {
-    title: '① 能量守恒：输入功率',
-    lines: [
-      `反激变换器本质是一个隔离型 BUCK-BOOST，` ,
-      `开关管 ON 时储能于变压器漏感+原边电感，OFF 时释放到副边。`,
-      ``,
-      `根据能量守恒：`,
-      `  Ppri = Pout / η`,
-      `其中 η 包含开关损耗、铜损、铁损、二极管压降损耗等。`,
-      `最低输入电压时最恶劣——此时 D 最大、电流峰值最高。`,
-    ],
-  },
-  {
-    title: '② 匝比 n = VOR / Vsec —— 为什么这么定？',
-    lines: [
-      `反射电压 VOR 是开关管 OFF 时折算到原边的副边电压。`,
-      `由变压器同名端关系：`,
-      `  VOR / Vo' = Np / Ns = n   （Vo' = Vo + Vf，含二极管压降）`,
-      `所以 n = VOR / (Vo + Vf)。`,
-      ``,
-      `VOR 的选择权衡：`,
-      `  • 太高 → D 越大 → 占空比更接近上限，MOSFET 与输出二极管耐压更高`,
-      `  • 太低 → D 越小 → 低压输入时原边峰值电流升高 → 铜损/MOSFET Rds(on) 损耗↑`,
-      `  • 同时 VOR 也决定 MOSFET 耐压：Vsw = Vin(max)√2 + VOR`,
-      `    例：265VAC → 375V + 120V = 495V → 选 600V MOSFET`,
-    ],
-  },
-  {
-    title: '③ 最大占空比 Dmax —— 从伏秒平衡推导',
-    lines: [
-      `稳态时变压器原边在一个周期内的净伏秒积为零（否则磁芯饱和）。`,
-      `ON 期间：V_Lp = Vdc，持续时间为 DTs`,
-      `OFF 期间：V_Lp = -VOR，持续时间为 (1-D)Ts`,
-      ``,
-      `伏秒平衡：`,
-      `  Vdc · DTs = VOR · (1-D)Ts`,
-      `  Vdc · D = VOR · (1-D)`,
-      `  Vdc · D + VOR · D = VOR`,
-      `  D(Vdc + VOR) = VOR`,
-      ``,
-      `  Dmax = VOR / (Vdc + VOR)`,
-      `最低 Vin 时 D 最大——这是最恶劣工况。`,
-      ``,
-      `◆ 占空比控制（<50%）：`,
-      `  Dmax ≤ 50% ⟺ VOR ≤ Vdc（因为 VOR/(Vdc+VOR) ≤ 0.5）`,
-      `  本工具上限设 48%（留裕量），对应 VOR ≤ 0.48·Vdc/(1-0.48) ≈ 0.92·Vdc。`,
-      `  若你填的目标 VOR 超过该值，工具自动降到上限，保证占空比≤48%。`,
-      ``,
-      `◆ 为什么压到 <50%：`,
-      `  VOR 越高 → Vsw = VdcMax + VOR + 漏感尖峰 越高 → MOSFET 耐压要求越高；`,
-      `  且 CCM 下 D>50% 易亚谐波振荡，需加斜坡补偿。`,
-      `  例：265VAC→375V + VOR=120V ≈ 495V → 选 600V/650V MOSFET。`,
-    ],
-  },
-  {
-    title: '④ 法拉第定律 → Np 最小值',
-    lines: [
-      `法拉第电磁感应定律：`,
-      `  V = N · dΦ/dt = N · Ae · dB/dt`,
-      `对恒定电压 V 作用时间 t：`,
-      `  V · t = N · Ae · ΔB`,
-      ``,
-      `在 PWM 中，ON 时间 t_on = D/f = D·Ts，施加电压为 Vdc：`,
-      `  Vdc · (D/fs) = Np · Ae · ΔB`,
-      ``,
-      `  Np_min = Vdc · Dmax / (ΔB · Ae · fs)`,
-      ``,
-      `物理意义：Np 不足时，同样 V·t 下 ΔB 超标 → 磁芯进入饱和区 → `,
-      `μ 骤降 → 励磁电感崩塌 → 初级电流指数飙升 → MOSFET 炸机。`,
-      ``,
-      `工程中取 Np_real = ceil(Km × Np_min)，Km ≈ 1.5~1.8 留裕量。`,
-    ],
-  },
-  {
-    title: '⑤ 次级匝数 Ns 与取整效应',
-    lines: [
-      `理想匝比 n = Np/Ns，取整后实际匝比为有理数而非无理数：`,
-      `  Ns = round(Np / n)，n_actual = Np_real / Ns`,
-      ``,
-      `取整会引入误差——VOR 和 D 都要重新计算：`,
-      `  VOR_actual = (Vo + Vf) · n_actual`,
-      `  Dmax_actual = VOR_actual / (Vdc + VOR_actual)`,
-      `这就是为什么取整后要"回代"校验。`,
-    ],
-  },
-  {
-    title: '⑥ 临界电感 Lcrit —— CCM/DCM 的分界线',
-    lines: [
-      `当开关管再次导通瞬间，次级电流恰好降到零——这就是临界状态。`,
-      ``,
-      `次级电流下降斜率（OFF 期间）：`,
-      `  di/dt = Vo' / Lp_sec = (Vo + Vf) / (Lp/n²) = n²(Vo+Vf) / Lp`,
-      `下降时间 = (1-D)/fs，所以下降量：`,
-      `  ΔI_sec = n²(Vo+Vf)(1-D) / (Lp · fs)`,
-      ``,
-      `平均次级电流（忽略纹波）：`,
-      `  Isec_avg = Io / (1-D)`,
-      ``,
-      `临界条件：峰值 = 2 × 平均值（三角波）：`,
-      `  ΔI_sec/2 = Io / (1-D)`,
-      ``,
-      `整理得临界电感：`,
-      `  Lcrit = n²·(Vo+Vf)·(1-D)² / (2·Io·fs)`,
-      `用 Pout = Vo·Io 替换 Io = Pout/Vo：`,
-      `  Lcrit = n²·Vo·(Vo+Vf)·(1-D)² / (2·Pout·fs)`,
-      `由于 Vo ≈ Vo+Vf（Vf 较小），常近似为：`,
-      `  Lcrit ≈ n²·Vo²·(1-D)² / (2·Pout·fs)`,
-      ``,
-      `Lp > Lcrit → CCM（连续，电流不降到零）`,
-      `Lp < Lcrit → DCM（断续，每个周期电流归零再充）`,
-      `Lp = Lcrit →临界 DCM（边界刚好归零）`,
-    ],
-  },
-  {
-    title: '⑦ CCM 模式：峰值/有效值电流推导',
-    lines: [
-      `CCM 下原边电流为三角波叠加直流偏置：`,
-      ``,
-      `平均原边电流（ON 期间导通）：`,
-      `  Ilp_avg = Ppri / (Vdc · D)    ← P = VI 的时域平均`,
-      ``,
-      `峰峰值纹波（三角波幅度）：`,
-      `  ΔIpp = Vdc · D / (Lp · fs)   ← V = L·di/dt 的微分形式`,
-      `定义纹波比 r = ΔIpp / Ilp_avg（通常取 0.3~0.4）：`,
-      `  ΔIpp = r · Ilp_avg`,
-      ``,
-      `峰值电流（波形最高点）：`,
-      `  Ipk = Ilp_avg + ΔIpp/2 = Ilp_avg · (1 + r/2)`,
-      ``,
-      `有效值（RMS，一个周期内发热等效）：`,
-      `  Irms = Ipk · √(D · (1 + r²/3))`,
-      `该式来自三角波 RMS 积分（on 期间有三角波，off 期间为零）。`,
-      ``,
-      `选择 Lp = (1.5~2) × Lcrit 的理由：`,
-      `  • 太接近 Lcrit → 对负载变化敏感，稍加重载就进 DCM`,
-      `  • 太大 → 开关频率固定但 ΔI↓ → 需要更大的 Np→ΔB↑ 或更大磁芯`,
-      `  • 1.5x 是兼顾动态响应和体积的折衷。`,
-    ],
-  },
-  {
-    title: '⑧ DCM 模式：峰值电流的平方根关系',
-    lines: [
-      `DCM 的能量传输是"批量"式的：每个周期充入固定能量然后释放完毕。`,
-      ``,
-      `一个周期的能量：`,
-      `  E_cycle = ½ · Lp · Ipk²`,
-      ``,
-      `功率 = 能量 × 频率：`,
-      `  Ppri = E_cycle · fs = ½ · Lp · Ipk² · fs`,
-      ``,
-      `反解峰值电流：`,
-      `  Ipk = √(2 · Ppri / (Lp · fs))`,
-      ``,
-      `DCM 的特性：`,
-      `  • 峰值电流与 Lp 成反比——电感越小，脉冲越尖`,
-      `  • 传导 EMI 更大（高频谐波丰富）`,
-      `  • 但控制环路更简单（右半平面零点问题不存在）`,
-      `  • 轻载效率高（没有 CCM 的续流损耗）`,
-      ``,
-      `所以小功率 (< 15W) 常见 DCM，大功率倾向 CCM。`,
-    ],
-  },
-  {
-    title: '⑨ 气隙长度 lg —— 为什么必须加气隙？',
-    lines: [
-      `无气隙铁氧体：μr ~ 2000，L 极大但极易饱和（ΔB 很小就饱和）。`,
-      ``,
-      `等效磁路：`,
-      `  ℜtotal = ℜcore + ℜgap = Le/(μ·μ₀·Ae) + lg/(μ₀·Ae)`,
-      `气隙 μr ≈ 1，远大于铁氧体 μr ~ 2000 的贡献，所以：`,
-      `  ℜtotal ≈ lg / (μ₀ · Ae)`,
-      ``,
-      `电感：`,
-      `  Lp = Np² / ℜtotal ≈ Np² · μ₀ · Ae / lg`,
-      ``,
-      `反解气隙：`,
-      `  lg = Np² · μ₀ · Ae / Lp`,
-      ``,
-      `物理意义：`,
-      `  • 气隙增加磁阻 → 降低有效电感 → 增大储能容量 (½LI²)`,
-      `  • 防止 ΔB 超限 → 避免饱和`,
-      `  • 但同时增大了漏感和边缘磁通 → 靠近气隙的线圈铜损显著上升（proximity effect）`,
-      ``,
-      `因此绕线时要注意：靠近气隙一侧用 P-S-P 三明治绕法`,
-      `（初级-绝缘-次级-绝缘-初级）以抵消漏磁场。`,
-    ],
-  },
-  {
-    title: '⑩ 导线截面积选择——电流密度经验法则',
-    lines: [
-      `导线选型原则：单位截面积的电流（电流密度 J）控制在合理范围。`,
-      ``,
-      `典型取值：`,
-      `  • 自然对流冷却：J = 3~4 A/mm²`,
-      `  • 强制风冷：J = 5~6 A/mm²`,
-      `  • PCB 走线：J = 10~20 A/mm²（散热好）`,
-      ``,
-      `所需截面积：`,
-      `  S = Irms / J`,
-      `查 AWG 表找 S ≤ 可用规格的最小 AWG 编号。`,
-      ``,
-      `如果线径太粗放不下，采用多股细线并绕：`,
-      `  N_strand = ceil(S_required / S_single)`,
-      `总截面积不变，但交流损耗略高（集肤效应减弱）。`,
-    ],
-  },
-]
-
-function toggleSteps() {
-  showSteps.value = !showSteps.value
+  copy(lines.join('\n'))
 }
 
 // ── 响应 SceneView 顶部栏的公式说明点击 ──
@@ -698,84 +319,6 @@ onMounted(() => {
   padding-top: 0;
   border-top: none;
 }
-
-/* ── 弹窗 ── */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(0,0,0,0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.modal-content {
-  background: #1a1f2e;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 640px;
-  max-height: 85vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  font-weight: bold;
-  color: var(--neon);
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--dim);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 4px 8px;
-}
-.modal-close:hover { color: var(--red); }
-
-.modal-body {
-  overflow-y: auto;
-  padding: 16px 20px;
-  flex: 1;
-}
-
-.step-block { margin-bottom: 18px; }
-.step-block:last-child { margin-bottom: 0; }
-
-.step-block h4 {
-  color: var(--cyan);
-  font-size: 13px;
-  margin: 0 0 6px 0;
-  letter-spacing: 0.5px;
-}
-
-.step-lines {
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.05);
-  border-radius: 6px;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.6;
-  color: #c8d0dc;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* ── 过渡动画 ── */
-.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 @media(max-width:700px) {
   .compare { font-size: 11px; }

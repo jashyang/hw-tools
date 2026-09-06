@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { parseResistor, formatOhms, formatVolt, formatAmp, parseVolt } from '../core/parse.js'
 import { rowEquiv, networkEquiv, solveVoltagePoints } from '../core/network.js'
+import { useCopy } from '../composables/useCopy.js'
 
 // ── 模式：等效电阻 / 分压电阻 ──
 const mode = ref('equiv')
@@ -241,24 +242,12 @@ function isTarget(row, j) {
   return !!target.value && target.value.row === row && target.value.res === j
 }
 
-// ── 复制 ──
-const copied = ref(false)
+// ── 复制（useCopy composable）──
+const { copied, copy } = useCopy()
 async function copyResult() {
   if (!result.value || result.value.error) return
   const lines = result.value.results.map((r) => `${r.label}: ${r.value}${r.note ? '（' + r.note + '）' : ''}`)
-  const text = `电阻计算（${mode.value === 'equiv' ? '等效电阻' : '分压反推'}）\n${lines.join('\n')}`
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
-    try { document.execCommand('copy') } catch { /* 忽略 */ }
-    ta.remove()
-  }
-  copied.value = true
-  setTimeout(() => (copied.value = false), 1500)
+  copy(`电阻计算（${mode.value === 'equiv' ? '等效电阻' : '分压反推'}）\n${lines.join('\n')}`)
 }
 </script>
 
