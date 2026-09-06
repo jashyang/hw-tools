@@ -304,7 +304,7 @@ DCM 的特性：
 }
 
 .modal-content {
-  background: #1a1f2e;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 12px;
   width: 100%;
@@ -359,7 +359,7 @@ DCM 的特性：
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1.6;
-  color: #c8d0dc;
+  color: var(--text);
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;

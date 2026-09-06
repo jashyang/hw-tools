@@ -5,6 +5,7 @@ import materials from '../core/data/materials.json'
 import awgTable from '../core/data/awg.json'
 import partsData from '../core/data/parts.json'
 import stdValuesRaw from '../core/data/stdvalues.json'
+import HwSelect from './HwSelect.vue'
 
 // ── 标准电感值展平（E12+E24 按数量级排列）──
 const STD_BASE = [1.0, 1.1, 1.2, 1.3, 1.5, 1.6, 1.8, 2.0, 2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.3, 4.7, 5.1, 5.6, 6.2, 6.8, 7.5, 8.2, 9.1]
@@ -29,6 +30,17 @@ const dBmaxDefault = computed(() => { const m = materials[coreMaterial.value]; r
 watch(coreMaterial, () => { dBmax.value = dBmaxDefault.value })
 const diodeType = ref('schottky')
 const preferredMode = ref('auto') // auto | ccm | dcm
+
+// ── 下拉选项（替代原生 <select>）──
+const coreOptions = computed(() =>
+  Object.entries(materials).map(([key, m]) => ({
+    value: key,
+    label: `${key}（${m.manufacturer}，ΔB默认 ${m.deltaBDyn}T）`,
+  }))
+)
+const diodeOptions = computed(() =>
+  Object.entries(partsData).map(([key, p]) => ({ value: key, label: p.label }))
+)
 
 // ── 计算结果 ──
 const result = ref(null)
@@ -459,9 +471,7 @@ onMounted(() => {
       </div>
       <div class="field">
         <label class="field-label"><span class="fname">磁芯材质</span></label>
-        <select v-model="coreMaterial" class="field-input sm">
-          <option v-for="(m,k) in materials" :key="k" :value="k">{{ k }}（{{ m.manufacturer }}，ΔB默认 {{ m.deltaBDyn }}T）</option>
-        </select>
+        <HwSelect v-model="coreMaterial" :options="coreOptions" placeholder="选择磁芯材质" size="sm" />
       </div>
       <div class="field">
         <label class="field-label"><span class="fname">ΔBmax 磁通密度摆幅 T（按材质自动取值）</span></label>
@@ -474,9 +484,7 @@ onMounted(() => {
       <div class="section-divider">─── 高级参数 ───</div>
       <div class="field">
         <label class="field-label"><span class="fname">输出整流管（仅用于 VOR 精确值，影响极小）</span></label>
-        <select v-model="diodeType" class="field-input sm">
-          <option v-for="(p,k) in partsData" :key="k" :value="k">{{ p.label }}</option>
-        </select>
+        <HwSelect v-model="diodeType" :options="diodeOptions" placeholder="选择整流管" size="sm" />
       </div>
       <div class="field">
         <label class="field-label"><span class="fname">工作模式偏好</span></label>
@@ -589,12 +597,12 @@ onMounted(() => {
 .inline-pair .dash, .inline-pair .slash { color: var(--dim); font-size: 14px; }
 .seg-group { display: flex; gap: 4px; background: rgba(6,9,15,0.45); border: 1px solid var(--border); border-radius: 6px; padding: 3px; }
 .seg-btn { flex:1; font-size: 11px; color: var(--dim); background: transparent; border: none; border-radius: 4px; padding: 4px 8px; cursor:pointer; }
-.seg-btn.on { color: var(--cyan); background: rgba(0,229,255,0.12); }
+.seg-btn.on { color: var(--cyan); background: rgba(79,138,168,0.14); }
 .sm { font-size: 16px !important; padding: 8px 10px !important; }
 
 /* ── 错误/警告 ── */
-.result-error { font-family: var(--mono); font-size: 12px; color: var(--red); padding: 8px; background: rgba(255,50,50,0.08); border-radius: 6px; }
-.warning-box { font-family: var(--mono); font-size: 12px; color: #ffaa00; background: rgba(255,170,0,0.08); border-radius: 6px; padding: 8px 10px; }
+.result-error { font-family: var(--mono); font-size: 12px; color: var(--red); padding: 8px; background: rgba(194,91,91,0.08); border-radius: 6px; }
+.warning-box { font-family: var(--mono); font-size: 12px; color: var(--amber); background: rgba(185,141,82,0.08); border-radius: 6px; padding: 8px 10px; }
 
 /* ── 表格区 ── */
 .table-section { margin-top: 8px; }

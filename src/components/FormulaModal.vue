@@ -71,7 +71,7 @@ const emit = defineEmits(['close'])
 }
 .modal-close:hover {
   color: var(--red);
-  background: rgba(255, 50, 50, 0.1);
+  background: rgba(194, 91, 91, 0.12);
 }
 .modal-body {
   padding: 20px;
@@ -97,7 +97,7 @@ const emit = defineEmits(['close'])
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.7;
-  color: #c0c8d8;
+  color: var(--text);
   white-space: pre-wrap;
   margin: 0;
   padding: 0;

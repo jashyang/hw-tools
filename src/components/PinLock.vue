@@ -142,7 +142,7 @@ const lockLeft = () => Math.max(0, Math.ceil((lockedUntil.value - Date.now()) / 
   border: 1px solid transparent;
   pointer-events: none;
 }
-.pin-panel.power-on { animation: poweron 0.9s ease-out; border-color: var(--neon); box-shadow: 0 0 30px rgba(0,255,159,0.2); }
+.pin-panel.power-on { animation: poweron 0.9s ease-out; border-color: var(--neon); box-shadow: 0 0 20px rgba(88,166,143,0.18); }
 .boot-log {
   font-family: var(--mono);
   font-size: 13px;

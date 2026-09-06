@@ -35,13 +35,13 @@
 }
 .trace {
   fill: none;
-  stroke: rgba(0, 255, 159, 0.1);
+  stroke: rgba(88, 166, 143, 0.12);
   stroke-width: 0.22;
   stroke-dasharray: 1.6 1.8;
   animation: trace-flow 2.4s linear infinite;
 }
 .trace.dim {
-  stroke: rgba(0, 229, 255, 0.06);
+  stroke: rgba(79, 138, 168, 0.08);
   animation-duration: 3.2s;
 }
 /* 虚线流动 = 电流在导线里跑 */
@@ -53,14 +53,14 @@
   fill: none;
   stroke-width: 0.35;
   stroke-linecap: round;
-  stroke: rgba(0, 255, 159, 0.4);
+  stroke: rgba(88, 166, 143, 0.4);
   stroke-dasharray: 1.2 150;
-  filter: drop-shadow(0 0 1px #00ff9f);
+  filter: drop-shadow(0 0 1px rgba(88, 166, 143, 0.5));
   animation: pulse-travel 6s linear infinite;
 }
 .pulse-bar.cyan {
-  stroke: rgba(0, 229, 255, 0.35);
-  filter: drop-shadow(0 0 1px #00e5ff);
+  stroke: rgba(79, 138, 168, 0.38);
+  filter: drop-shadow(0 0 1px rgba(79, 138, 168, 0.5));
   animation-duration: 8s;
   animation-delay: -2s;
 }
