@@ -122,8 +122,8 @@ const currentCatName = computed(() => {
 所以 n = VOR / (Vo + Vf)。
 
 VOR 的选择权衡：
-  • 太高 → D 变小 → 占空比窗口窄，控制困难
-  • 太低 → D 变大 → 原边峰值电流升高 → MOSFET Rds(on) 损耗↑
+  • 太高 → D 越大 → 占空比更接近上限，MOSFET 与输出二极管耐压更高
+  • 太低 → D 越小 → 低压输入时原边峰值电流升高 → 铜损/MOSFET Rds(on) 损耗↑
   • 同时 VOR 也决定 MOSFET 耐压：Vsw = Vin(max)√2 + VOR
     例：265VAC → 375V + 120V = 495V → 选 600V MOSFET</pre>
             </div>
@@ -140,7 +140,17 @@ OFF 期间：V_Lp = -VOR，持续时间为 (1-D)Ts
   D(Vdc + VOR) = VOR
 
   Dmax = VOR / (Vdc + VOR)
-最低 Vin 时 D 最大——这是最恶劣工况。</pre>
+最低 Vin 时 D 最大——这是最恶劣工况。
+
+◆ 占空比控制（&lt;50%）：
+  Dmax ≤ 50% ⟺ VOR ≤ Vdc（因为 VOR/(Vdc+VOR) ≤ 0.5）
+  本工具上限设 48%（留裕量），对应 VOR ≤ 0.48·Vdc/(1-0.48) ≈ 0.92·Vdc。
+  若你填的目标 VOR 超过该值，工具自动降到上限，保证占空比≤48%。
+
+◆ 为什么压到 &lt;50%：
+  VOR 越高 → Vsw = VdcMax + VOR + 漏感尖峰 越高 → MOSFET 耐压要求越高；
+  且 CCM 下 D>50% 易亚谐波振荡，需加斜坡补偿。
+  例：265VAC→375V + VOR=120V ≈ 495V → 选 600V/650V MOSFET。</pre>
             </div>
             <div class="step-block">
               <h4>④ 法拉第定律 → Np 最小值</h4>
@@ -185,11 +195,11 @@ OFF 期间：V_Lp = -VOR，持续时间为 (1-D)Ts
   ΔI_sec/2 = Io / (1-D)
 
 整理得临界电感：
-  Lcrit = n²·(Vo+Vf)·(1-D) / (2·Io·fs)
+  Lcrit = n²·(Vo+Vf)·(1-D)² / (2·Io·fs)
 用 Pout = Vo·Io 替换 Io = Pout/Vo：
-  Lcrit = n²·Vo·(Vo+Vf)·(1-D) / (2·Pout·fs)
+  Lcrit = n²·Vo·(Vo+Vf)·(1-D)² / (2·Pout·fs)
 由于 Vo ≈ Vo+Vf（Vf 较小），常近似为：
-  Lcrit ≈ n²·Vo²·(1-D) / (2·Pout·fs)
+  Lcrit ≈ n²·Vo²·(1-D)² / (2·Pout·fs)
 
 Lp > Lcrit → CCM（连续，电流不降到零）
 Lp < Lcrit → DCM（断续，每个周期电流归零再充）
