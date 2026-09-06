@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { materials } from '../core/data/materials.js'
 import { cores } from '../core/data/cores.js'
 import { partsData } from '../core/data/parts.js'
@@ -20,17 +20,13 @@ const fs = ref('65')
 const eta = ref('87')
 const vorTarget = ref('120')
 const coreMaterial = ref('PC40')
-const dBmax = ref(0.28)
 const showSteps = ref(false)
-const dBmaxDefault = computed(() => { const m = materials[coreMaterial.value]; return m ? m.deltaBDyn : 0.28 })
-watch(coreMaterial, () => { if (!dBmax.value) dBmax.value = dBmaxDefault.value })
 const diodeType = ref('schottky')
 const preferredMode = ref('auto') // auto | ccm | dcm
 
-// ── 新增可空字段：磁芯规格 / 磁芯截面积 / 反馈供电电压 ──
-// 磁芯规格：''=自动(按功率推荐)；磁芯截面积：''=用磁芯库标准值；反馈供电Vcc：''=推荐12V
+// ── 新增可空字段：磁芯规格 / 反馈供电电压 ──
+// 磁芯规格：''=自动(按功率推荐)；反馈供电Vcc：''=推荐12V
 const coreModel = ref('')
-const coreAe = ref('')
 const vcc = ref('')
 
 // ── 下拉选项（替代原生 <select>）──
@@ -64,8 +60,8 @@ function compute() {
     vo: vo.value, io: io.value,
     fs: fs.value, eta: eta.value,
     vorTarget: vorTarget.value, coreMaterial: coreMaterial.value,
-    dBmax: dBmax.value, diodeType: diodeType.value, preferredMode: preferredMode.value,
-    coreModel: coreModel.value, coreAe: coreAe.value, vcc: vcc.value,
+    diodeType: diodeType.value, preferredMode: preferredMode.value,
+    coreModel: coreModel.value, vcc: vcc.value,
   })
   if (res.error) { error.value = res.error; result.value = null; return }
   result.value = res
@@ -167,14 +163,6 @@ onMounted(() => {
         <HwSelect v-model="coreModel" :options="coreModelOptions" placeholder="自动（按功率推荐）" size="sm" />
       </div>
       <div class="field">
-        <label class="field-label"><span class="fname">磁性截面积 Ae（mm²）</span></label>
-        <input v-model="coreAe" type="text" inputmode="decimal" class="field-input sm" placeholder="空=用磁芯库值" />
-      </div>
-      <div class="field">
-        <label class="field-label"><span class="fname">最大磁通密度 ΔBmax（T）</span></label>
-        <input v-model="dBmax" type="text" inputmode="decimal" class="field-input sm" placeholder="空=材质默认" />
-      </div>
-      <div class="field">
         <label class="field-label"><span class="fname">反馈供电电压 Vcc（V）</span></label>
         <input v-model="vcc" type="text" inputmode="decimal" class="field-input sm" placeholder="空=推荐 12V" />
       </div>
@@ -244,7 +232,7 @@ onMounted(() => {
           <tbody>
             <tr><td class="dim">输出功率</td><td>{{ result.derived.Pout.toFixed(1) }} W</td></tr>
             <tr><td class="dim">直流母线 Vin(min)→Vdc(min)</td><td>{{ result.input.VinMin }}VAC → {{ result.derived.VdcMin.toFixed(1) }} VDC</td></tr>
-            <tr><td class="dim">磁芯型号</td><td>{{ result.derived.coreModel }} <span class="note">({{ result.derived.source }})</span> （Ae={{ result.derived.Ae }}mm², Le={{ result.derived.Le }}mm, Aw={{ result.derived.Aw }}mm²）{{ result.input.coreAe ? `· 用户覆写 Ae` : '' }}</td></tr>
+            <tr><td class="dim">磁芯型号</td><td>{{ result.derived.coreModel }} <span class="note">({{ result.derived.source }})</span> （Ae={{ result.derived.Ae }}mm², Le={{ result.derived.Le }}mm, Aw={{ result.derived.Aw }}mm²）</td></tr>
             <tr><td class="dim">材质等级</td><td>{{ result.derived.materialName }}（ΔBmax={{ result.input.dBmaxUsed }}T）</td></tr>
             <tr><td class="dim">初级匝数 Np</td><td><b>{{ result.winding.Np }} Turn</b> <span class="note">(理论最小≈{{ result.winding.NpMin }}Turn)</span></td></tr>
             <tr><td class="dim">次级匝数 Ns</td><td><b>{{ result.winding.Ns }} Turn</b></td></tr>
@@ -310,6 +298,12 @@ onMounted(() => {
 /* ── 输入网格 ── */
 .input-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { display: flex; align-items: baseline; gap: 8px; }
+.fname { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: 1px; }
+.field-input {
+  font-size: 18px !important;
+  padding: 10px 12px !important;
+}
 .inline-pair { display: flex; align-items: center; gap: 6px; }
 .inline-pair .dash, .inline-pair .slash { color: var(--dim); font-size: 14px; }
 .seg-group { display: flex; gap: 4px; background: rgba(6,9,15,0.45); border: 1px solid var(--border); border-radius: 6px; padding: 3px; }
