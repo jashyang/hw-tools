@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { materials } from '../core/data/materials.js'
+import { cores } from '../core/data/cores.js'
 import { partsData } from '../core/data/parts.js'
 import { computeFlyback } from '../core/flyback-engine.js'
 import { flybackDerivation } from '../core/derivations.js'
@@ -19,12 +20,18 @@ const fs = ref('65')
 const eta = ref('87')
 const vorTarget = ref('120')
 const coreMaterial = ref('PC40')
-const dBmax = ref(0.20)
+const dBmax = ref(0.28)
 const showSteps = ref(false)
-const dBmaxDefault = computed(() => { const m = materials[coreMaterial.value]; return m ? m.deltaBDyn : 0.20 })
-watch(coreMaterial, () => { dBmax.value = dBmaxDefault.value })
+const dBmaxDefault = computed(() => { const m = materials[coreMaterial.value]; return m ? m.deltaBDyn : 0.28 })
+watch(coreMaterial, () => { if (!dBmax.value) dBmax.value = dBmaxDefault.value })
 const diodeType = ref('schottky')
 const preferredMode = ref('auto') // auto | ccm | dcm
+
+// ── 新增可空字段：磁芯规格 / 磁芯截面积 / 反馈供电电压 ──
+// 磁芯规格：''=自动(按功率推荐)；磁芯截面积：''=用磁芯库标准值；反馈供电Vcc：''=推荐12V
+const coreModel = ref('')
+const coreAe = ref('')
+const vcc = ref('')
 
 // ── 下拉选项（替代原生 <select>）──
 const coreOptions = computed(() =>
@@ -39,6 +46,11 @@ const diodeOptions = computed(() =>
     .filter(([, p]) => typeof p.Vf === 'number' && p.Vf > 0)
     .map(([key, p]) => ({ value: key, label: p.label }))
 )
+// 磁芯规格下拉：首项"自动(按功率推荐)" value=''，其余为磁芯库各型号
+const coreModelOptions = computed(() => [
+  { value: '', label: '自动（按功率推荐）' },
+  ...cores.map((c) => ({ value: c.model, label: `${c.model}（约${c.maxPower}W）` })),
+])
 
 // ── 计算结果 ──
 const result = ref(null)
@@ -53,6 +65,7 @@ function compute() {
     fs: fs.value, eta: eta.value,
     vorTarget: vorTarget.value, coreMaterial: coreMaterial.value,
     dBmax: dBmax.value, diodeType: diodeType.value, preferredMode: preferredMode.value,
+    coreModel: coreModel.value, coreAe: coreAe.value, vcc: vcc.value,
   })
   if (res.error) { error.value = res.error; result.value = null; return }
   result.value = res
@@ -69,11 +82,12 @@ async function copyResult() {
     `输出: ${r.input.Vo}V/${r.input.Io}A (${r.derived.Pout.toFixed(1)}W)`,
     `磁芯: ${r.derived.coreModel} ${r.derived.materialName}`,
     `Np=${r.winding.Np} Turn / Ns=${r.winding.Ns} Turn (TR=${r.winding.nActual.toFixed(1)})`,
+    r.winding.Naux ? `辅助绕组 Naux=${r.winding.Naux} Turn（Vcc≈${r.winding.vcc}V）` : null,
     `VOR=${r.winding.VorActual.toFixed(1)}V / Dmax=${(r.derived.DmaxActual * 100).toFixed(1)}%`,
     `Lp=${r.design.LpLabel} · 气隙≈${r.design.lg}mm`,
     `Ipk=${r.design.Ipk.toFixed(2)}A / Irms=${r.design.Irms.toFixed(2)}A / 次级峰值Ispk=${r.design.IsPk.toFixed(2)}A`,
     ...r.winding.warnings,
-  ]
+  ].filter((l) => l !== null)
   copy(lines.join('\n'))
 }
 
@@ -146,6 +160,24 @@ onMounted(() => {
         <label class="field-label"><span class="fname">输出整流管</span></label>
         <HwSelect v-model="diodeType" :options="diodeOptions" placeholder="选择整流管" size="sm" />
       </div>
+
+      <div class="group-label">高级参数（可选，不填自动推荐）</div>
+      <div class="field">
+        <label class="field-label"><span class="fname">磁性规格</span></label>
+        <HwSelect v-model="coreModel" :options="coreModelOptions" placeholder="自动（按功率推荐）" size="sm" />
+      </div>
+      <div class="field">
+        <label class="field-label"><span class="fname">磁性截面积 Ae（mm²）</span></label>
+        <input v-model="coreAe" type="text" inputmode="decimal" class="field-input sm" placeholder="空=用磁芯库值" />
+      </div>
+      <div class="field">
+        <label class="field-label"><span class="fname">最大磁通密度 ΔBmax（T）</span></label>
+        <input v-model="dBmax" type="text" inputmode="decimal" class="field-input sm" placeholder="空=材质默认" />
+      </div>
+      <div class="field">
+        <label class="field-label"><span class="fname">反馈供电电压 Vcc（V）</span></label>
+        <input v-model="vcc" type="text" inputmode="decimal" class="field-input sm" placeholder="空=推荐 12V" />
+      </div>
     </div>
 
     <!-- 公式说明弹窗（必须在 v-if="result" 外，否则未计算时也能弹出） -->
@@ -212,10 +244,14 @@ onMounted(() => {
           <tbody>
             <tr><td class="dim">输出功率</td><td>{{ result.derived.Pout.toFixed(1) }} W</td></tr>
             <tr><td class="dim">直流母线 Vin(min)→Vdc(min)</td><td>{{ result.input.VinMin }}VAC → {{ result.derived.VdcMin.toFixed(1) }} VDC</td></tr>
-            <tr><td class="dim">磁芯型号</td><td>{{ result.derived.coreModel }} <span class="note">({{ result.derived.source }})</span> （Ae={{ result.derived.Ae }}mm², Le={{ result.derived.Le }}mm, Aw={{ result.derived.Aw }}mm²）</td></tr>
-            <tr><td class="dim">材质等级</td><td>{{ result.derived.materialName }}（ΔBmax={{ dBmax }}T）</td></tr>
+            <tr><td class="dim">磁芯型号</td><td>{{ result.derived.coreModel }} <span class="note">({{ result.derived.source }})</span> （Ae={{ result.derived.Ae }}mm², Le={{ result.derived.Le }}mm, Aw={{ result.derived.Aw }}mm²）{{ result.input.coreAe ? `· 用户覆写 Ae` : '' }}</td></tr>
+            <tr><td class="dim">材质等级</td><td>{{ result.derived.materialName }}（ΔBmax={{ result.input.dBmaxUsed }}T）</td></tr>
             <tr><td class="dim">初级匝数 Np</td><td><b>{{ result.winding.Np }} Turn</b> <span class="note">(理论最小≈{{ result.winding.NpMin }}Turn)</span></td></tr>
             <tr><td class="dim">次级匝数 Ns</td><td><b>{{ result.winding.Ns }} Turn</b></td></tr>
+            <tr v-if="result.winding.Naux" class="aux-row">
+              <td class="dim">辅助绕组 Naux（Vcc反馈）</td>
+              <td><b>{{ result.winding.Naux }} Turn</b> <span class="note">(Vcc≈{{ result.winding.vcc }}V, {{ result.winding.auxAWG }})</span></td>
+            </tr>
             <tr><td class="dim">实际匝比 TR</td><td>{{ result.winding.nActual.toFixed(1) }} : 1 （等效 {{ result.winding.Np }}:{{ result.winding.Ns }}）</td></tr>
             <tr><td class="dim">实际反射电压 VOR'</td><td>{{ result.winding.VorActual.toFixed(1) }} V</td></tr>
             <tr><td class="dim">占空比 Dmax</td><td>{{ (result.derived.DmaxActual * 100).toFixed(1) }} %</td></tr>
@@ -313,6 +349,7 @@ onMounted(() => {
   border-radius: 8px;
   padding: 8px 12px;
 }
+.aux-row td { color: var(--neon); }
 .mode-tag {
   flex-shrink: 0;
   padding: 3px 10px;
