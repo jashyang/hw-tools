@@ -309,7 +309,11 @@ onMounted(() => {
 .seg-group { display: flex; gap: 4px; background: rgba(6,9,15,0.45); border: 1px solid var(--border); border-radius: 6px; padding: 3px; }
 .seg-btn { flex:1; font-size: 11px; color: var(--dim); background: transparent; border: none; border-radius: 4px; padding: 4px 8px; cursor:pointer; }
 .seg-btn.on { color: var(--cyan); background: rgba(79,138,168,0.14); }
-.sm { font-size: 16px !important; padding: 8px 10px !important; }
+.field-input.sm {
+  font-size: 16px !important;
+  padding: 8px 10px !important;
+  line-height: 21px;
+}
 
 /* ── 标题行 + 计算按钮（与电阻计算一致：按钮在右侧） ── */
 .calc-title { justify-content: space-between; }
