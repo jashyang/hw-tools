@@ -419,7 +419,7 @@ async function copyResult() {
 .mode-btn.on {
   color: var(--neon);
   border-color: var(--neon-dim);
-  background: rgba(0, 255, 159, 0.1);
+  background: rgba(88, 166, 143, 0.1);
   box-shadow: var(--glow-green);
 }
 
@@ -478,7 +478,7 @@ async function copyResult() {
 .seg-btn.on {
   color: var(--cyan);
   border-color: var(--cyan-dim);
-  background: rgba(0, 229, 255, 0.12);
+  background: rgba(79, 138, 168, 0.12);
   text-shadow: var(--glow-cyan);
 }
 .row-tag {
@@ -538,7 +538,7 @@ async function copyResult() {
 .node-btn.on {
   border-color: var(--neon);
   color: var(--neon);
-  background: rgba(0, 255, 159, 0.12);
+  background: rgba(88, 166, 143, 0.12);
   box-shadow: var(--glow-green);
 }
 .node-dot {
@@ -585,7 +585,7 @@ async function copyResult() {
 }
 .r-calc { flex-shrink: 0; min-width: 30px; padding: 2px 4px; }
 .r-calc.on {
-  background: rgba(0, 255, 159, 0.15);
+  background: rgba(88, 166, 143, 0.15);
   border-color: var(--neon);
   color: var(--neon);
   box-shadow: var(--glow-green);

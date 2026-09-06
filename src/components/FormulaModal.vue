@@ -48,7 +48,7 @@ const emit = defineEmits(['close'])
   width: 100%;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 0 40px rgba(0, 255, 159, 0.1);
+  box-shadow: 0 0 40px rgba(88, 166, 143, 0.1);
 }
 .modal-header {
   display: flex;
