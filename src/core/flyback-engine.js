@@ -137,7 +137,8 @@ function tryDesign(inp, core, Pout, Ppri, VinMin, VinMax, Vo, Vf, VsecTotal, Vor
   const needArea = (NpReal * Apri + NsReal * Asec) / K_UTIL
   const fill = needArea / core.Aw
   const gapOk = lgMm <= core.maxGap
-  if (!(fill <= 1 && gapOk && BsatOk && lgMm > 0)) return null
+  // 气隙偏大仅警告(漏感/邻近损耗)，不否决磁芯；真正否决的是窗口塞不下 或 ΔB 超饱和
+  if (!(fill <= 1 && BsatOk && lgMm > 0)) return null
 
   // 铜损
   const MLT_m = core.MLT * 1e-3
@@ -195,7 +196,8 @@ export function computeFlyback(inp) {
   const Ppri = Pout / Eta
   const mat = findMaterial(inp.coreMaterial)
 
-  // 磁芯迭代：从满足功率的最小磁芯开始，逐个试；全不合格则取功率最大的并给警告
+  // 磁芯选型：从满足功率的最小磁芯(Ae最小)开始，取第一个"窗口塞得下 且 ΔB 不饱和"的——
+  // 工程上选能落地的最小(最省体积/成本)；气隙偏大是警告(漏感/邻近损耗)，不否决磁芯。
   const candidates = recommendPowerSet(Pout).sort((a, b) => a.Ae - b.Ae)
   let best = null
   for (const core of candidates) {
