@@ -70,12 +70,12 @@ function compute() {
   // 解析输入
   const VinMin = parseFloat(vinMin.value), VinMax = parseFloat(vinMax.value)
   const Vo = parseFloat(vo.value), Io = parseFloat(io.value)
-  const Fs = parseFloat(fs.value) / 1e3      // kHz→Hz
+  const Fs = parseFloat(fs.value) * 1e3      // kHz→Hz [修复：×1000]
   const Eta = parseFloat(eta.value) / 100     // %→小数
   const DdB = parseFloat(dBmax.value)
   const VorT = parseFloat(vorTarget.value)
   const diode = getPart(diodeType.value)
-  
+
   if (!diode || isNaN(VinMin) || isNaN(VinMax) || isNaN(Vo) || isNaN(Io) || isNaN(Fs) || isNaN(Eta) || isNaN(DdB) || isNaN(VorT)) {
     error.value = '请填写所有字段，检查格式是否正确'; result.value = null; return
   }
@@ -106,53 +106,47 @@ function compute() {
   // 实际反射电压
   const VorActual = VsecTotal * nActual
   const DmaxActual = VorActual / (VdcMin + VorActual)
-  // 临界电感
-  const Lcrit = (nActual * nActual * Vo * Vo * (1 - DmaxActual)) / (2 * Pout * Fs)
-  // CCM模式取Lp = 1.5 * Lcrit
+  // 边界临界电感（CCM/DCM 分界）[修复：补上 (1-D)²]
+  const Lcrit = (nActual * nActual * Vo * Vo * (1 - DmaxActual) * (1 - DmaxActual)) / (2 * Pout * Fs)
+  const LcritLabel = findClosestStd(Lcrit)?.label ?? `${(Lcrit * 1000).toFixed(1)}mH`
+
+  // ── CCM 参数 ──
+  const rCCM = 0.35                            // 纹波比 r = ΔI/ILavg
   const LpCCM = 1.5 * Lcrit
-  // 纹波电流比 r = ΔIL / ILavg (CCM中典型取r≈0.3~0.4)
-  const rCCM = 0.35
-  const ILavgPri = Pout / (Eta * VdcMin * DmaxActual)
-  const deltaICCMLp = rCCM * ILavgPri
-  const IpkCCM = ILavgPri + deltaICCMLp / 2
-  const IspkCCM = IpkCCM * nActual
+  const ILavgPriCCM = Pout / (Eta * VdcMin * DmaxActual)
+  const IpkCCM = ILavgPriCCM * (1 + rCCM / 2)          // 峰值 = 平均×(1+r/2)
   const IrmsCCM = IpkCCM * Math.sqrt(DmaxActual * (1 + rCCM * rCCM / 3))
+  const IspkSecCCM = IpkCCM * nActual                  // 次级峰值 = n×初级峰值
   const ILavgSecCCM = Io / (1 - DmaxActual)
-  const IspkSecCCM = 2 * ILavgSecCCM / (1 - rCCM) // 近似峰值
-  // 气隙
+
+  // ── DCM 参数 ──
+  const LpDCM = (VdcMin * VdcMin * DmaxActual * DmaxActual) / (2 * Ppri * Fs)
+  const IpkDCM = Math.sqrt(2 * Ppri / (LpDCM * Fs))    // [修复] 峰值 = √(2P/(Lp·fs))
+  const IrmsDCM = IpkDCM * Math.sqrt(DmaxActual / 3)   // DCM 三角波有效值（占空比 D）
+  const IspkSecDCM = IpkDCM * nActual                  // [修复] 次级峰值 = n×初级峰值
+
+  // ── 模式决策：按功率档位，而非峰值电流比 ──
+  const prefer = preferredMode.value
+  const modeRcmd = Pout < 15 ? 'dcm' : 'ccm'           // <15W→DCM，≥15W→CCM（经验）
+  const designMode = prefer === 'auto' ? modeRcmd : prefer
+
+  const isCCM = designMode === 'ccm'
+  const Lp = isCCM ? LpCCM : LpDCM
+  const LpLabel = isCCM
+    ? (findClosestStd(LpCCM)?.label ?? `${(LpCCM * 1000).toFixed(1)}mH`)
+    : (findClosestStd(LpDCM)?.label ?? `${(LpDCM * 1000).toFixed(1)}mH`)
+  const IpK = isCCM ? IpkCCM : IpkDCM
+  const IrmS = isCCM ? IrmsCCM : IrmsDCM
+  const IsPk = isCCM ? IspkSecCCM : IspkSecDCM
+
+  // 气隙（跟随选定模式的 Lp）
   const mu0 = 4 * Math.PI * 1e-7
-  const lgCCM = (mu0 * NpReal * NpReal * Ae) / LpCCM - Le / 1e3 // m → mm调整注意单位
-  // 更准确的气隙公式: lg = μ0 * Np² * Ae / Lp （单位: m）
-  const lgCCMMm = (mu0 * NpReal * NpReal * Ae) / LpCCM * 1000 // mm
+  const lgMm = (mu0 * NpReal * NpReal * Ae) / Lp * 1000 // mm
 
-  // ── DCM 方案 ──
-  const VccMin = VdcMin
-  const LpDCM = (VccMin * VccMin * DmaxActual * DmaxActual) / (2 * Ppri * Fs)
-  const deltaIDCMLp = (VorActual + Vo + Vf) * (1 - DmaxActual) * (LpDCM * Fs) / LpDCM // 这个不对...
-  // DCM: Ipri_pk = √(2 * Ppri * Fs * Lp) / (Vin_min_DC * D) 或
-  const IpkDCM = Math.sqrt(2 * Ppri * Fs * LpDCM) / VccMin
-  const ILavgPriDCM = Ppri / (VccMin * DmaxActual)
-  const IspkDCM = IpkDCM * nActual
-  // DCM次级峰值
-  const IspkSecDCM = IpkDCM * nActual * DmaxActual / (1 - DmaxActual)
-
-  // 标准电感最接近值
-  const stdCCM = findClosestStd(LpCCM)
-  const stdDCM = findClosestStd(LpDCM)
-
-  // 导线选型建议
+  // 导线选型（跟随选定模式）
   function suggestAWG(currentA) {
     for (const a of awgTable) { if (a.currentA >= currentA * 1.3) return a }
     return awgTable[awgTable.length - 1]
-  }
-  const priAWG = suggestAWG(IrmsCCM * 1.1)
-  const secAWG = suggestAWG(IspkSecCCM * 0.5) // 次级有效值更低
-  // 考虑绕线窗口填充率，如果线太粗需要多股并绕
-  function parallelStrands(areaNeeded, singleArea) {
-    if (singleArea >= areaNeeded * 0.8) return [{ awg: findWireByArea(singleArea).awg, count: 1 }]
-    let count = Math.ceil(areaNeeded / singleArea)
-    count = Math.min(count, 8) // 最多8股
-    return [{ ...findWireByArea(singleArea * count), count }]
   }
   function findWireByArea(targetArea) {
     for (let i = awgTable.length - 1; i >= 0; i--) {
@@ -160,48 +154,62 @@ function compute() {
     }
     return awgTable[0]
   }
-  const priStrands = parallelStrands(IrmsCCM * 1.1 / 4, priAWG.areaMm2)
-  const secStrands = parallelStrands(IspkSecCCM * 0.5 / 4, secAWG.areaMm2)
+  function parallelStrands(areaNeeded, singleArea) {
+    if (singleArea >= areaNeeded * 0.8) return [{ awg: findWireByArea(singleArea).awg, count: 1 }]
+    let count = Math.min(Math.ceil(areaNeeded / singleArea), 8) // 最多8股
+    return [{ ...findWireByArea(singleArea * count), count }]
+  }
+  const priAWG = suggestAWG(IrmS * 1.1)
+  const secAWG = suggestAWG(IsPk * 0.5)
+  const priStrands = parallelStrands(IrmS * 1.1 / 4, priAWG.areaMm2)
+  const secStrands = parallelStrands(IsPk * 0.5 / 4, secAWG.areaMm2)
 
   // 安全校验
   const warnings = []
   if (NpReal < NpMin) warnings.push('⚠ 警告：初级匝数不足，可能磁芯饱和！请增加匝数或换大磁芯')
   if (Pout > recommendedCore.maxPower) warnings.push(`⚠ 提示：功率 ${Pout.toFixed(1)}W 超过 ${recommendedCore.model} 的 ${recommendedCore.maxPower}W 推荐上限，建议换大一号磁芯`)
+  if (Pout < 15 && designMode === 'ccm') warnings.push('💡 提示：小功率(<15W) 通常优先 DCM，控制更简单、无 RHP 零点')
+  if (Pout > 20 && designMode === 'dcm') warnings.push('💡 提示：较大功率(>20W) 用 DCM 峰值/有效值电流偏高，建议 CCM')
 
-  // CCM/DCM 对比结论
-  const prefer = preferredMode.value
+  // ── 结论/推荐说明（按功率档位，不按峰值比） ──
   let conclusion = ''
-  if (prefer !== 'auto') {
-    conclusion = prefer === 'ccm' ? '✅ 锁定 CCM' : '✅ 锁定 DCM'
+  if (prefer === 'auto') {
+    conclusion = isCCM
+      ? `推荐 CCM —— ${Pout.toFixed(1)}W 属中功率(15~65W)，峰值电流低、发热小`
+      : `推荐 DCM —— ${Pout.toFixed(1)}W 属小功率(<15W)，控制简单、无右半平面零点`
   } else {
-    conclusion = IpkCCM < IpkDCM * 0.6 ? '✅ 锁定 CCM：峰值电流低、热耗小，优于DCM' : '✅ 锁定 DCM：参数适合断续模式'
+    conclusion = isCCM
+      ? `已选 CCM —— 峰值低、发热小；需 RCD 钳位，控制建议留 RHP 零点补偿`
+      : `已选 DCM —— 控制简单、动态快；峰值电流高、EMI 偏大`
   }
 
   result.value = {
-    input: { VinMin, VinMax, Vo, Io, Fs: parseFloat(fs.value), Eta: parseFloat(eta.value), coreMaterial, dBmax: DdB, vorTarget: VorT },
+    input: { VinMin, VinMax, Vo, Io, Eta: parseFloat(eta.value), coreMaterial, dBmax: DdB, vorTarget: VorT },
     derived: {
       VdcMin, VsecTotal, n, nActual, Dmax, DmaxActual, Ppri, Pout,
       coreModel: recommendedCore.model, materialName: `${coreMaterial.value}(${mat.manufacturer})`,
       Ae: recommendedCore.Ae, AeLe: recommendedCore.AeLe, Ve: recommendedCore.Ve,
+      Le: recommendedCore.Le,
+      Lcrit, LcritLabel, mode: designMode,
     },
     winding: {
       NpMin: Math.floor(NpMin), Np: NpReal, Ns: NsReal, nActual,
       VorActual,
-      lgCCM: lgCCMMm.toFixed(2),
+      lg: lgMm.toFixed(2),
       warnings,
     },
     ccm: {
       Lp: LpCCM, LpLabel: findClosestStd(LpCCM)?.label ?? `${(LpCCM * 1000).toFixed(1)}mH`,
-      Ipk: IpkCCM, IsPk: IspkCCM, Irms: IrmsCCM,
-      r: rCCM,
-      secAvg: ILavgSecCCM, secPeak: IspkSecCCM,
+      Ipk: IpkCCM, Irms: IrmsCCM, secAvg: ILavgSecCCM, secPeak: IspkSecCCM,
     },
     dcm: {
       Lp: LpDCM, LpLabel: findClosestStd(LpDCM)?.label ?? `${(LpDCM * 1000).toFixed(1)}mH`,
-      Ipk: IpkDCM, IsPk: IspkDCM,
+      Ipk: IpkDCM, Irms: IrmsDCM, secPeak: IspkSecDCM,
     },
-    wire: { priAWG: `AWG ${priAWG.awg}`, secAWG: `AWG ${secAWG.awg}`, priStrands, secStrands },
-    stdInductor: { ccm: stdCCM?.label, dcm: stdDCM?.label },
+    design: {
+      mode: designMode, Lp, LpLabel, lg: lgMm.toFixed(2), Ipk: IpK, Irms: IrmS, IsPk,
+      priAWG: `AWG ${priAWG.awg}`, secAWG: `AWG ${secAWG.awg}`, priStrands, secStrands,
+    },
     conclusion,
   }
 }
@@ -209,15 +217,15 @@ function compute() {
 async function copyResult() {
   if (!result.value) return
   const r = result.value
+  const modeName = r.design.mode === 'ccm' ? 'CCM' : 'DCM'
   const lines = [
-    `反激变压器设计定案`,
+    `反激变压器设计定案（${modeName}）`,
     `输出: ${r.input.Vo}V/${r.input.Io}A (${r.derived.Pout.toFixed(1)}W)`,
     `磁芯: ${r.derived.coreModel} ${r.derived.materialName}`,
     `Np=${r.winding.Np} Turn / Ns=${r.winding.Ns} Turn (TR=${r.winding.nActual.toFixed(1)})`,
     `VOR=${r.winding.VorActual.toFixed(1)}V / Dmax=${(r.derived.DmaxActual * 100).toFixed(1)}%`,
-    `Lp=${r.ccm.LpLabel} (CCM模式)`,
-    `Ipk=${r.ccm.Ipk.toFixed(2)}A / Ispk=${r.ccm.IsPk.toFixed(2)}A`,
-    `气隙≈${r.winding.lgCCM}mm`,
+    `Lp=${r.design.LpLabel} · 气隙≈${r.design.lg}mm`,
+    `Ipk=${r.design.Ipk.toFixed(2)}A / Irms=${r.design.Irms.toFixed(2)}A / 次级峰值Ispk=${r.design.IsPk.toFixed(2)}A`,
     ...r.winding.warnings,
   ]
   const text = lines.join('\n')
@@ -323,11 +331,11 @@ const steps = [
       `  ΔI_sec/2 = Io / (1-D)`,
       ``,
       `整理得临界电感：`,
-      `  Lcrit = n²·(Vo+Vf)·(1-D) / (2·Io·fs)`,
+      `  Lcrit = n²·(Vo+Vf)·(1-D)² / (2·Io·fs)`,
       `用 Pout = Vo·Io 替换 Io = Pout/Vo：`,
-      `  Lcrit = n²·Vo·(Vo+Vf)·(1-D) / (2·Pout·fs)`,
+      `  Lcrit = n²·Vo·(Vo+Vf)·(1-D)² / (2·Pout·fs)`,
       `由于 Vo ≈ Vo+Vf（Vf 较小），常近似为：`,
-      `  Lcrit ≈ n²·Vo²·(1-D) / (2·Pout·fs)`,
+      `  Lcrit ≈ n²·Vo²·(1-D)² / (2·Pout·fs)`,
       ``,
       `Lp > Lcrit → CCM（连续，电流不降到零）`,
       `Lp < Lcrit → DCM（断续，每个周期电流归零再充）`,
@@ -532,56 +540,57 @@ onMounted(() => {
         <div v-for="(w,i) in result.winding.warnings" :key="i" class="warn-item">{{ w }}</div>
       </div>
 
-      <!-- 表一：CCM vs DCM 对比 -->
+      <!-- 当前方案 + 推荐说明（按功率档位，不按峰值比） -->
+      <div class="mode-note">
+        <span class="mode-tag" :class="result.design.mode">{{ result.design.mode === 'ccm' ? 'CCM · 连续导通' : 'DCM · 断续导通' }}</span>
+        <span class="mode-why">{{ result.conclusion }}</span>
+      </div>
+
+      <!-- 表一：两种模式后果对比（信息参考，不自动选模式） -->
       <div class="table-section">
-        <h3 class="table-title">📊 工作模式评估</h3>
+        <h3 class="table-title">📊 两种工作模式后果对比</h3>
         <table class="data-table compare">
           <thead>
             <tr>
-              <th style="width:140px">对比维度</th>
-              <th>CCM 方案</th>
-              <th>DCM 方案</th>
-              <th>结论</th>
+              <th style="width:150px">对比维度</th>
+              <th>CCM</th>
+              <th>DCM</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td class="dim">初级峰值电流 Ipk</td>
-              <td><b>{{ result.ccm.Ipk.toFixed(2) }} A</b></td>
-              <td><b>{{ result.dcm.Ipk.toFixed(2) }} A</b></td>
-              <td rowspan="3" class="conclusion-cell">{{ result.conclusion }}</td>
-            </tr>
-            <tr>
-              <td class="dim">次级峰值电流 IsPk</td>
-              <td><b>{{ result.ccm.IsPk.toFixed(2) }} A</b></td>
-              <td><b>{{ result.dcm.IsPk.toFixed(2) }} A</b></td>
-            </tr>
-            <tr>
-              <td class="dim">原边电感量 Lp</td>
-              <td>{{ result.ccm.LpLabel }}</td>
-              <td>{{ result.dcm.LpLabel }}</td>
-            </tr>
+            <tr><td class="dim">原边电感 Lp</td><td>{{ result.ccm.LpLabel }}</td><td>{{ result.dcm.LpLabel }}</td></tr>
+            <tr><td class="dim">初级峰值 Ipk</td><td>{{ result.ccm.Ipk.toFixed(2) }} A</td><td>{{ result.dcm.Ipk.toFixed(2) }} A</td></tr>
+            <tr><td class="dim">初级有效值 Irms</td><td>{{ result.ccm.Irms.toFixed(2) }} A</td><td>{{ result.dcm.Irms.toFixed(2) }} A</td></tr>
+            <tr><td class="dim">次级峰值 Ispk</td><td>{{ result.ccm.secPeak.toFixed(2) }} A</td><td>{{ result.dcm.secPeak.toFixed(2) }} A</td></tr>
+            <tr><td class="dim">适用功率</td><td>15～65W</td><td>&lt;15W</td></tr>
+            <tr><td class="dim">控制复杂度</td><td>需 RCD 钳位 + RHP 零点补偿</td><td>简单，无 RHP 零点</td></tr>
+            <tr><td class="dim">EMI / 开关应力</td><td>峰值低，EMI 较好</td><td>峰值高，EMI 偏大</td></tr>
           </tbody>
         </table>
       </div>
 
-      <!-- 表二：核心设计定案 -->
+      <!-- 表二：核心设计定案（跟随所选模式） -->
       <div class="table-section">
-        <h3 class="table-title">🔧 核心设计参数</h3>
+        <h3 class="table-title">🔧 核心设计定案（{{ result.design.mode === 'ccm' ? 'CCM' : 'DCM' }}）</h3>
         <table class="data-table specs">
           <tbody>
             <tr><td class="dim">输出功率</td><td>{{ result.derived.Pout.toFixed(1) }} W</td></tr>
             <tr><td class="dim">直流母线 Vin(min)→Vdc(min)</td><td>{{ result.input.VinMin }}VAC → {{ result.derived.VdcMin.toFixed(1) }} VDC</td></tr>
             <tr><td class="dim">磁芯型号</td><td>{{ result.derived.coreModel }} （Ae={{ result.derived.Ae }}mm², Le={{ result.derived.Le }}mm）</td></tr>
-            <tr><td class="dim">材质等级</td><td>{{ result.derived.materialName }} （ΔBmax={{ dBmax }}T）</td></tr>
+            <tr><td class="dim">材质等级</td><td>{{ result.derived.materialName }}（ΔBmax={{ dBmax }}T）</td></tr>
             <tr><td class="dim">初级匝数 Np</td><td><b>{{ result.winding.Np }} Turn</b> <span class="note">(理论最小≈{{ result.winding.NpMin }}Turn)</span></td></tr>
             <tr><td class="dim">次级匝数 Ns</td><td><b>{{ result.winding.Ns }} Turn</b></td></tr>
             <tr><td class="dim">实际匝比 TR</td><td>{{ result.winding.nActual.toFixed(1) }} : 1 （等效 {{ result.winding.Np }}:{{ result.winding.Ns }}）</td></tr>
             <tr><td class="dim">实际反射电压 VOR'</td><td>{{ result.winding.VorActual.toFixed(1) }} V</td></tr>
             <tr><td class="dim">占空比 Dmax</td><td>{{ (result.derived.DmaxActual * 100).toFixed(1) }} %</td></tr>
-            <tr><td class="dim">气隙长度 lg</td><td>{{ result.winding.lgCCM }} mm</td></tr>
-            <tr><td class="dim">初级线径建议</td><td>{{ result.wire.priAWG }}（多股并绕 ×{{ result.wire.priStrands[0]?.count || 1 }}）</td></tr>
-            <tr><td class="dim">次级线径建议</td><td>{{ result.wire.secAWG }}</td></tr>
+            <tr><td class="dim">边界电感 Lcrit</td><td>{{ result.derived.LcritLabel }}（{{ result.design.mode === 'ccm' ? '所选 Lp＞此值→CCM' : '所选 Lp＜此值→DCM' }}）</td></tr>
+            <tr><td class="dim">原边电感 Lp</td><td><b>{{ result.design.LpLabel }}</b></td></tr>
+            <tr><td class="dim">气隙长度 lg</td><td>{{ result.design.lg }} mm</td></tr>
+            <tr><td class="dim">初级峰值 Ipk</td><td>{{ result.design.Ipk.toFixed(2) }} A</td></tr>
+            <tr><td class="dim">初级有效值 Irms</td><td>{{ result.design.Irms.toFixed(2) }} A</td></tr>
+            <tr><td class="dim">次级峰值 Ispk</td><td>{{ result.design.IsPk.toFixed(2) }} A</td></tr>
+            <tr><td class="dim">初级线径建议</td><td>{{ result.design.priAWG }}（多股并绕 ×{{ result.design.priStrands[0]?.count || 1 }}）</td></tr>
+            <tr><td class="dim">次级线径建议</td><td>{{ result.design.secAWG }}</td></tr>
           </tbody>
         </table>
       </div>
@@ -622,9 +631,33 @@ onMounted(() => {
 .data-table tr:last-child td { border-bottom: none; }
 .dim { color: var(--dim); font-size: 11px; white-space: nowrap; }
 .note { color: var(--dim); font-size: 11px; }
-.conclusion-cell { writing-mode: vertical-rl; text-align: center; color: var(--neon); font-size: 12px; letter-spacing: 2px; }
 
 .copy-btn { margin-top: 12px; }
+
+/* ── 当前方案说明条（按功率推荐，非自动锁定） ── */
+.mode-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: rgba(79, 138, 168, 0.08);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.mode-tag {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 5px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: var(--neon);
+  background: rgba(88, 166, 143, 0.14);
+  border: 1px solid var(--neon-dim);
+}
+.mode-tag.dcm { color: var(--amber); background: rgba(185,141,82,0.14); border-color: var(--amber-dim); }
+.mode-why { color: var(--dim); line-height: 1.5; }
 
 /* ── 分组标题（输入区整理布局） ── */
 .group-label {
@@ -732,7 +765,6 @@ onMounted(() => {
 @media(max-width:700px) {
   .compare { font-size: 11px; }
   .compare td, .compare th { padding: 4px 6px; }
-  .conclusion-cell { writing-mode: horizontal-tb; padding: 4px 0; }
   .specs td:first-child { width: 140px; }
 }
 </style>
