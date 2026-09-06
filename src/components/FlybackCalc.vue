@@ -212,21 +212,52 @@ onMounted(() => {
           <tbody>
             <tr><td class="dim">输出功率</td><td>{{ result.derived.Pout.toFixed(1) }} W</td></tr>
             <tr><td class="dim">直流母线 Vin(min)→Vdc(min)</td><td>{{ result.input.VinMin }}VAC → {{ result.derived.VdcMin.toFixed(1) }} VDC</td></tr>
-            <tr><td class="dim">磁芯型号</td><td>{{ result.derived.coreModel }} （Ae={{ result.derived.Ae }}mm², Le={{ result.derived.Le }}mm）</td></tr>
+            <tr><td class="dim">磁芯型号</td><td>{{ result.derived.coreModel }} <span class="note">({{ result.derived.source }})</span> （Ae={{ result.derived.Ae }}mm², Le={{ result.derived.Le }}mm, Aw={{ result.derived.Aw }}mm²）</td></tr>
             <tr><td class="dim">材质等级</td><td>{{ result.derived.materialName }}（ΔBmax={{ dBmax }}T）</td></tr>
             <tr><td class="dim">初级匝数 Np</td><td><b>{{ result.winding.Np }} Turn</b> <span class="note">(理论最小≈{{ result.winding.NpMin }}Turn)</span></td></tr>
             <tr><td class="dim">次级匝数 Ns</td><td><b>{{ result.winding.Ns }} Turn</b></td></tr>
             <tr><td class="dim">实际匝比 TR</td><td>{{ result.winding.nActual.toFixed(1) }} : 1 （等效 {{ result.winding.Np }}:{{ result.winding.Ns }}）</td></tr>
             <tr><td class="dim">实际反射电压 VOR'</td><td>{{ result.winding.VorActual.toFixed(1) }} V</td></tr>
             <tr><td class="dim">占空比 Dmax</td><td>{{ (result.derived.DmaxActual * 100).toFixed(1) }} %</td></tr>
+            <tr><td class="dim">工作磁密 ΔB</td><td>{{ result.derived.dBact.toFixed(3) }} T <span class="note">(材料 Bs={{ result.derived.Bsat }}T, 100℃ 安全上限≈{{ result.derived.BsEff.toFixed(2) }}T)</span></td></tr>
             <tr><td class="dim">边界电感 Lcrit</td><td>{{ result.derived.LcritLabel }}（{{ result.design.mode === 'ccm' ? '所选 Lp＞此值→CCM' : '所选 Lp＜此值→DCM' }}）</td></tr>
             <tr><td class="dim">原边电感 Lp</td><td><b>{{ result.design.LpLabel }}</b></td></tr>
-            <tr><td class="dim">气隙长度 lg</td><td>{{ result.design.lg }} mm</td></tr>
+            <tr><td class="dim">气隙长度 lg</td><td>{{ result.design.lg }} mm <span class="note">(骨架限 ≤{{ result.derived.maxGap }}mm)</span></td></tr>
+            <tr><td class="dim">窗口填充率</td><td>{{ result.winding.fillPct }}% <span class="note">(需 ≤100%，线径已按 RMS+4.5A/mm² 选)</span></td></tr>
             <tr><td class="dim">初级峰值 Ipk</td><td>{{ result.design.Ipk.toFixed(2) }} A</td></tr>
             <tr><td class="dim">初级有效值 Irms</td><td>{{ result.design.Irms.toFixed(2) }} A</td></tr>
+            <tr><td class="dim">次级有效值 Irms</td><td>{{ result.design.IsecRms.toFixed(2) }} A</td></tr>
             <tr><td class="dim">次级峰值 Ispk</td><td>{{ result.design.IsPk.toFixed(2) }} A</td></tr>
-            <tr><td class="dim">初级线径建议</td><td>{{ result.design.priAWG }}（多股并绕 ×{{ result.design.priStrands[0]?.count || 1 }}）</td></tr>
+            <tr><td class="dim">初级线径建议</td><td>{{ result.design.priAWG }}</td></tr>
             <tr><td class="dim">次级线径建议</td><td>{{ result.design.secAWG }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 表三：损耗 / 温升（估算） -->
+      <div class="table-section">
+        <h3 class="table-title">🔥 损耗 / 温升（估算）</h3>
+        <table class="data-table specs">
+          <tbody>
+            <tr><td class="dim">漏感 Lleak</td><td>{{ (result.loss.Lleak * 1000).toFixed(1) }} µH <span class="note">(≈2% Lp，P-S-P 三明治)</span></td></tr>
+            <tr><td class="dim">初级铜损</td><td>{{ result.loss.Pcu.toFixed(2) }} W</td></tr>
+            <tr><td class="dim">磁芯铁损</td><td>{{ result.loss.Pcore.toFixed(2) }} W</td></tr>
+            <tr><td class="dim">总损耗</td><td>{{ result.loss.Ptot.toFixed(2) }} W</td></tr>
+            <tr><td class="dim">估算效率</td><td>{{ result.loss.eff.toFixed(1) }} %</td></tr>
+            <tr><td class="dim">估算温升 ΔT</td><td>≈ {{ result.loss.dT.toFixed(1) }} ℃ <span class="note">(参考热阻估算，需实测)</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 表四：器件应力与选型 -->
+      <div class="table-section">
+        <h3 class="table-title">⚡ 器件应力与选型</h3>
+        <table class="data-table specs">
+          <tbody>
+            <tr><td class="dim">MOSFET 关断压 Vsw</td><td>{{ result.stress.Vsw.toFixed(0) }} V <span class="note">(VdcMax+VOR+尖峰 {{ result.stress.Vspike.toFixed(1) }}V)</span></td></tr>
+            <tr><td class="dim">MOSFET 耐压建议</td><td><b>{{ result.stress.mosfet }}</b> <span class="note">(需 ≥{{ result.stress.vdsReq.toFixed(0) }}V)</span></td></tr>
+            <tr><td class="dim">次级二极管反压 Vr</td><td>{{ result.stress.VrDiode.toFixed(0) }} V <span class="note">(需 ≥{{ result.stress.vrReq.toFixed(0) }}V)</span></td></tr>
+            <tr><td class="dim">次级整流管建议</td><td><b>{{ result.stress.diode }}</b></td></tr>
           </tbody>
         </table>
       </div>

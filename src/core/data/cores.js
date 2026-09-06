@@ -1,16 +1,19 @@
+// 磁芯库 —— Ae/Le/Ve 为真实标准值（Acme Ferrite / TDK 规格表，符合 IEC 63093-8 E 型磁芯标准，
+// 均满足 Ve ≈ Ae×Le 自洽校验；EE25/13/7 另经 TDK 官方 datasheet 交叉核对）。
+// Aw(绕组窗口面积mm²)/MLT(平均匝长mm)/maxGap(可磨气隙上限mm) 为配套骨架+工艺**参考值**，
+// 以实际骨架/bobbin datasheet 为准（引擎界面会提示可覆写）。
+// maxPower 为按磁芯体积/频率的**推荐功率参考**（工程估算，非标准值）。
 export const cores = [
-  { series: 'EE', model: 'EE13', material: 'PC40', Ae: 16, Le: 13.7, AeLe: 219, Ve: 219, maxPower: 5 },
-  { series: 'EE', model: 'EE16', material: 'PC40', Ae: 25.1, Le: 16.2, AeLe: 407, Ve: 407, maxPower: 10 },
-  { series: 'EE', model: 'EE20', material: 'PC40', Ae: 43.3, Le: 26.0, AeLe: 1126, Ve: 1126, maxPower: 20 },
-  { series: 'EE', model: 'EE25', material: 'PC40', Ae: 66, Le: 30.2, AeLe: 1993, Ve: 608, maxPower: 40 },
-  { series: 'EE', model: 'EE28', material: 'PC40', Ae: 78, Le: 34.2, AeLe: 2668, Ve: 734, maxPower: 55 },
-  { series: 'EE', model: 'EE30', material: 'PC40', Ae: 86.1, Le: 37.2, AeLe: 3203, Ve: 844, maxPower: 60 },
-  { series: 'EE', model: 'EE33', material: 'PC40', Ae: 102, Le: 41.7, AeLe: 4254, Ve: 1039, maxPower: 90 },
-  { series: 'EE', model: 'EE34', material: 'PC40', Ae: 115, Le: 44.2, AeLe: 5083, Ve: 1167, maxPower: 100 },
-  { series: 'EE', model: 'EE42', material: 'PC40', Ae: 111, Le: 51.7, AeLe: 5738, Ve: 5740, maxPower: 120 },
-  { series: 'EE', model: 'EE50', material: 'PC40', Ae: 176, Le: 64.0, AeLe: 11264, Ve: 11264, maxPower: 200 },
-  { series: 'EE', model: 'EE55', material: 'PC40', Ae: 201, Le: 70.8, AeLe: 14231, Ve: 14231, maxPower: 250 },
-  { series: 'EE', model: 'EE65', material: 'PC40', Ae: 283, Le: 86.0, AeLe: 24338, Ve: 24338, maxPower: 450 },
-  { series: 'EE', model: 'EE70', material: 'PC40', Ae: 334, Le: 97.8, AeLe: 32665, Ve: 32665, maxPower: 500 },
-  { series: 'EE', model: 'EE100', material: 'PC40', Ae: 602, Le: 153.0, AeLe: 92106, Ve: 92106, maxPower: 1000 }
+  { series: 'EE', model: 'EE13/7/4',   Ae: 17.7,  Le: 24.3,  Ve: 430,    maxPower: 3,   Aw: 22,  MLT: 32,  maxGap: 0.15, source: 'Acme/IEC EE13/7/4' },
+  { series: 'EE', model: 'EE16/8/5',   Ae: 26.1,  Le: 32.3,  Ve: 842,    maxPower: 6,   Aw: 34,  MLT: 42,  maxGap: 0.20, source: 'Acme EE16.4' },
+  { series: 'EE', model: 'EE19/16',    Ae: 22.1,  Le: 40.6,  Ve: 897,    maxPower: 10,  Aw: 40,  MLT: 52,  maxGap: 0.25, source: 'Acme EE19B' },
+  { series: 'EE', model: 'EE20/10/6',  Ae: 32.1,  Le: 46.3,  Ve: 1490,   maxPower: 15,  Aw: 52,  MLT: 58,  maxGap: 0.30, source: 'Acme EE20A' },
+  { series: 'EE', model: 'EE22',       Ae: 44.3,  Le: 46.7,  Ve: 2070,   maxPower: 20,  Aw: 60,  MLT: 60,  maxGap: 0.30, source: 'Acme EE20.5B' },
+  { series: 'EE', model: 'EE25/13/7',  Ae: 52.5,  Le: 57.5,  Ve: 3020,   maxPower: 30,  Aw: 70,  MLT: 72,  maxGap: 0.40, source: 'TDK E25/13/7 (B66317)' },
+  { series: 'EE', model: 'EE30/15/7',  Ae: 60.6,  Le: 70.8,  Ve: 4290,   maxPower: 45,  Aw: 95,  MLT: 88,  maxGap: 0.45, source: 'Acme EE30A' },
+  { series: 'EE', model: 'EE35',       Ae: 82.6,  Le: 69.2,  Ve: 5719,   maxPower: 55,  Aw: 110, MLT: 95,  maxGap: 0.50, source: 'Acme EE35A' },
+  { series: 'EE', model: 'EE36',       Ae: 115.5, Le: 81.7,  Ve: 9441,   maxPower: 75,  Aw: 140, MLT: 105, maxGap: 0.55, source: 'Acme EE36' },
+  { series: 'EE', model: 'EE42/21/15', Ae: 178,   Le: 97.6,  Ve: 17400,  maxPower: 120, Aw: 210, MLT: 125, maxGap: 0.65, source: 'Acme EE42A' },
+  { series: 'EE', model: 'EE65/32/27', Ae: 532,   Le: 146.9, Ve: 78183,  maxPower: 350, Aw: 520, MLT: 185, maxGap: 0.90, source: 'Acme EE65' },
+  { series: 'EE', model: 'EE70',       Ae: 674.6, Le: 149.9, Ve: 101106, maxPower: 450, Aw: 600, MLT: 200, maxGap: 1.00, source: 'Acme EE70' }
 ]
