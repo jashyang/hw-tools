@@ -218,12 +218,12 @@ export const flyback = {
   component: 'flyback',
 }
 
-// ── PCB 阻抗计算（单端微带 / 单端带状线 / 差分微带）──
+// ── PCB 走线线宽计算（单端微带 / 差分微带 / 单端带状线）──
 export const impedance = {
   id: 'impedance',
-  name: '阻抗计算',
+  name: '线宽计算',
   icon: '📐',
-  desc: 'PCB 走线特性阻抗：单端微带 / 单端带状线 / 差分微带 · 算阻抗或反解线宽',
+  desc: 'PCB 走线阻抗/线宽：单端微带 · 差分微带 · 单端带状线 · 反解线宽或算阻抗',
   component: 'impedance',
 }
 
@@ -252,7 +252,7 @@ export const CATEGORIES = [
   },
   {
     id: 'impedance',
-    name: '阻抗计算',
+    name: 'Layout计算',
     icon: '📐',
     items: ['impedance'],
   },
