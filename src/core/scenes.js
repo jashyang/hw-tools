@@ -218,8 +218,17 @@ export const flyback = {
   component: 'flyback',
 }
 
+// ── PCB 阻抗计算（单端微带 / 单端带状线 / 差分微带）──
+export const impedance = {
+  id: 'impedance',
+  name: '阻抗计算',
+  icon: '📐',
+  desc: 'PCB 走线特性阻抗：单端微带 / 单端带状线 / 差分微带 · 算阻抗或反解线宽',
+  component: 'impedance',
+}
+
 // ── 场景注册表 ──
-export const scenes = [resistor, power, rc, flyback]
+export const scenes = [resistor, power, rc, flyback, impedance]
 
 // ── 分类结构（大类 → 小类） ──
 export const CATEGORIES = [
@@ -240,6 +249,12 @@ export const CATEGORIES = [
     name: '开关电源',
     icon: '🔌',
     items: ['flyback'],
+  },
+  {
+    id: 'impedance',
+    name: '阻抗计算',
+    icon: '📐',
+    items: ['impedance'],
   },
 ]
 
