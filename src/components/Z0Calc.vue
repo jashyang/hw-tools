@@ -158,13 +158,22 @@ async function copyResult() {
 
     <!-- 结果 -->
     <div v-if="error" class="result-error">⚠ {{ error }}</div>
-    <div v-if="result" class="result-panel">
-      <div class="result-row"><span class="result-label">W1（底部宽）</span><span class="result-value led">{{ fnum(disp(result.W1), 3) }} {{ unit }}</span></div>
-      <div class="result-row"><span class="result-label">W2（顶部宽）</span><span class="result-value led">{{ fnum(disp(result.W2), 3) }} {{ unit }}</span></div>
-      <div class="result-row"><span class="result-label">等效宽 We</span><span class="result-value led">{{ fnum(disp(result.We), 3) }} {{ unit }}</span></div>
-      <div v-if="result.kind === 'diff'" class="result-row"><span class="result-label">差分阻抗 Zdiff</span><span class="result-value led">{{ fnum(result.Z) }} Ω</span></div>
-      <div v-else class="result-row"><span class="result-label">特性阻抗 Z0</span><span class="result-value led">{{ fnum(result.Z) }} Ω</span></div>
-      <div v-if="result.kind === 'diff'" class="result-row"><span class="result-label">单端微带 Z0 / 奇模</span><span class="result-value">{{ fnum(result.z0) }} / {{ fnum(result.zodd) }} Ω</span></div>
+    <div v-if="result" class="result-panel z0-result">
+      <!-- 主结果（大号绿粗，按方向切换）：反解=We，算阻抗=Z -->
+      <div class="z0-main">
+        <div class="z0-main-value led" v-if="direction === 'solve'">{{ fnum(disp(result.We), 3) }} <small>{{ unit }}</small></div>
+        <div class="z0-main-value led" v-else>{{ fnum(result.Z) }} <small>Ω</small></div>
+        <div class="z0-main-label">{{ direction === 'solve' ? '等效宽 We = (W1+W2)/2' : (result.kind === 'diff' ? '差分阻抗 Zdiff' : '特性阻抗 Z0') }}</div>
+      </div>
+
+      <!-- 次级结果（分开显示） -->
+      <div class="z0-sub">
+        <div class="result-row"><span class="result-label">W1（底部宽）</span><span class="result-value">{{ fnum(disp(result.W1), 3) }} {{ unit }}</span></div>
+        <div class="result-row"><span class="result-label">W2（顶部宽）</span><span class="result-value">{{ fnum(disp(result.W2), 3) }} {{ unit }}</span></div>
+        <div v-if="direction === 'solve'" class="result-row"><span class="result-label">目标阻抗</span><span class="result-value">{{ fnum(result.Z) }} Ω</span></div>
+        <div v-if="result.kind === 'diff'" class="result-row"><span class="result-label">单端微带 Z0</span><span class="result-value">{{ fnum(result.z0) }} Ω</span></div>
+        <div v-if="result.kind === 'diff'" class="result-row"><span class="result-label">奇模 Zodd</span><span class="result-value">{{ fnum(result.zodd) }} Ω</span></div>
+      </div>
       <button class="btn cyan copy-btn" @click="copyResult">{{ copied ? '✓ 已复制' : '⧉ 复制结果' }}</button>
     </div>
   </div>
@@ -193,4 +202,24 @@ async function copyResult() {
 .field-input.sm { font-size: 16px !important; padding: 8px 10px !important; line-height: 21px; }
 
 .hint { font-size: 11px; color: var(--dim); line-height: 1.6; }
+
+/* 主结果（大号绿粗）：反解=We，算阻抗=Z */
+.z0-result { display: flex; flex-direction: column; gap: 14px; }
+.z0-main { display: flex; flex-direction: column; gap: 2px; padding: 4px 2px; }
+.z0-main-value {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.z0-main-value small { font-size: 18px; font-weight: 400; opacity: 0.7; margin-left: 4px; }
+.z0-main-label { font-family: var(--mono); font-size: 12px; color: var(--dim); letter-spacing: 1px; }
+/* 次级结果区：与主结果分开，卡片行 */
+.z0-sub {
+  display: flex; flex-direction: column; gap: 0;
+  border-top: 1px dashed rgba(255,255,255,0.1);
+  padding-top: 10px;
+}
+.z0-sub .result-row { padding: 5px 0; }
 </style>

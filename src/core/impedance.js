@@ -96,7 +96,7 @@ export function computeImpedance(inp) {
     if (!(W1 > 0)) return { error: '请填写线宽 W1' }
     const z = zOfW1(model, er, H, b, W1, S, T)
     const W2 = W1 - ETCH_DELTA
-    const r = { W1, W2, We: weffFor(model, H, W1, T) }
+    const r = { W1, W2, We: (W1 + W2) / 2 }
     if (model === 'diff') {
       const full = diffMicrostrip(er, H, weffFor('diff', H, W1, T), S, T)
       return { ...r, z0: full.z0, zodd: full.zodd, zeven: full.zeven, zcom: full.zcom, Z: z, kind: 'diff' }
@@ -109,7 +109,7 @@ export function computeImpedance(inp) {
   const zf = (x) => zOfW1(model, er, H, b, x, S, T)
   const w1 = bisect(zf, targetZ, 0.01 * MIL, 5000 * MIL)
   const W2 = w1 - ETCH_DELTA
-  const r = { W1: w1, W2, We: weffFor(model, H, w1, T) }
+  const r = { W1: w1, W2, We: (w1 + W2) / 2 }
   // 回代校验 + 完整结果
   if (model === 'diff') {
     const full = diffMicrostrip(er, H, weffFor('diff', H, w1, T), S, T)
