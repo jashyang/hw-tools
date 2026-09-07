@@ -28,10 +28,14 @@ function toMM(str) {
 
 // ── 常用目标阻抗默认值（反解提示用）──
 const defTarget = computed(() => model.value === 'diff' ? 100 : 50)
-// 切换走线类型：单端→目标50；差分→目标100 + 间距默认 8
+// 切换走线类型：差分→目标100（间距默认8）；单端/带状线→目标50
 watch(model, (m) => {
-  if (m === 'diff') { if (!sText.value) sText.value = '8'; if (!zText.value) zText.value = '100' }
-  else { if (!zText.value) zText.value = '50' }
+  if (m === 'diff') {
+    if (!sText.value) sText.value = '8'
+    zText.value = '100'
+  } else {
+    zText.value = '50'
+  }
 })
 
 // ── 校验与计算 ──
