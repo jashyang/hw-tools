@@ -14,9 +14,9 @@ const erText = ref('')     // Er
 const hText = ref('')      // H（单端微带/差分：到参考面）
 const bText = ref('')      // b（带状线：两平面总间距）
 const tText = ref('')      // T 铜厚
-const sText = ref('')      // S 间距（差分）
+const sText = ref('')      // S 间距（差分，默认 8）
 const wText = ref('')      // W1（正算用）
-const zText = ref('')      // 目标阻抗（反解用）
+const zText = ref('50')    // 目标阻抗（反解用）：单端默认 50 / 差分默认 100
 
 // ── 单位换算：输入字符串 → 内部 mm ──
 function toMM(str) {
@@ -28,6 +28,11 @@ function toMM(str) {
 
 // ── 常用目标阻抗默认值（反解提示用）──
 const defTarget = computed(() => model.value === 'diff' ? 100 : 50)
+// 切换走线类型：单端→目标50；差分→目标100 + 间距默认 8
+watch(model, (m) => {
+  if (m === 'diff') { if (!sText.value) sText.value = '8'; if (!zText.value) zText.value = '100' }
+  else { if (!zText.value) zText.value = '50' }
+})
 
 // ── 校验与计算 ──
 const result = ref(null)
@@ -170,9 +175,14 @@ async function copyResult() {
       <div class="z0-sub">
         <div class="result-row"><span class="result-label">W1（底部宽）</span><span class="result-value">{{ fnum(disp(result.W1), 3) }} {{ unit }}</span></div>
         <div class="result-row"><span class="result-label">W2（顶部宽）</span><span class="result-value">{{ fnum(disp(result.W2), 3) }} {{ unit }}</span></div>
-        <div v-if="direction === 'solve'" class="result-row"><span class="result-label">目标阻抗</span><span class="result-value">{{ fnum(result.Z) }} Ω</span></div>
-        <div v-if="result.kind === 'diff'" class="result-row"><span class="result-label">单端微带 Z0</span><span class="result-value">{{ fnum(result.z0) }} Ω</span></div>
-        <div v-if="result.kind === 'diff'" class="result-row"><span class="result-label">奇模 Zodd</span><span class="result-value">{{ fnum(result.zodd) }} Ω</span></div>
+        <div v-if="result.kind === 'diff'">
+          <div class="result-row"><span class="result-label">单端微带 Z0</span><span class="result-value">{{ fnum(result.z0) }} Ω</span></div>
+          <div class="result-row"><span class="result-label">奇模 Zodd</span><span class="result-value">{{ fnum(result.zodd) }} Ω</span></div>
+          <div class="result-row"><span class="result-label">偶模 Zeven</span><span class="result-value">{{ fnum(result.zeven) }} Ω</span></div>
+          <div class="result-row"><span class="result-label">共模 Zcom</span><span class="result-value">{{ fnum(result.zcom) }} Ω</span></div>
+          <div class="result-row"><span class="result-label">Zdiff = 2 × Zodd</span><span class="result-value">{{ fnum(result.Z, 2) }} Ω</span></div>
+        </div>
+        <div v-if="direction === 'solve'" class="result-row"><span class="result-label">目标阻抗</span><span class="result-value">{{ fnum(result.Ztarget) }} Ω</span></div>
       </div>
       <button class="btn cyan copy-btn" @click="copyResult">{{ copied ? '✓ 已复制' : '⧉ 复制结果' }}</button>
     </div>
@@ -215,11 +225,17 @@ async function copyResult() {
 }
 .z0-main-value small { font-size: 18px; font-weight: 400; opacity: 0.7; margin-left: 4px; }
 .z0-main-label { font-family: var(--mono); font-size: 12px; color: var(--dim); letter-spacing: 1px; }
-/* 次级结果区：与主结果分开，卡片行 */
+/* 次级结果区：与主结果分开，非核心不加粗，跟随普通文字字号 */
 .z0-sub {
   display: flex; flex-direction: column; gap: 0;
   border-top: 1px dashed rgba(255,255,255,0.1);
   padding-top: 10px;
 }
 .z0-sub .result-row { padding: 5px 0; }
+.z0-sub .result-value {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+}
+.z0-sub .result-label { font-size: 12px; }
 </style>
