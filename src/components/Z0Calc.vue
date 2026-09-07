@@ -120,20 +120,20 @@ async function copyResult() {
         <input v-model="erText" type="text" inputmode="decimal" class="field-input sm" placeholder="如 4.2" autocomplete="off" spellcheck="false" />
       </div>
 
-      <!-- T 铜厚 -->
-      <div class="field">
-        <label class="field-label"><span class="fname">铜厚 T</span><span class="funit">{{ unit }}</span></label>
-        <input v-model="tText" type="text" inputmode="decimal" class="field-input sm" placeholder="如 1.25 / 2.2" autocomplete="off" spellcheck="false" />
-      </div>
-
       <!-- H 或 b：单端微带/差分用 H，带状线用 b -->
       <div class="field" v-if="model !== 'sl'">
         <label class="field-label"><span class="fname">介质厚度 H</span><span class="funit">{{ unit }}</span></label>
-        <input v-model="hText" type="text" inputmode="decimal" class="field-input sm" placeholder="到参考面厚度 / 4.66" autocomplete="off" spellcheck="false" />
+        <input v-model="hText" type="text" inputmode="decimal" class="field-input sm" placeholder="到参考面厚度 / 4.2" autocomplete="off" spellcheck="false" />
       </div>
       <div class="field" v-if="model === 'sl'">
         <label class="field-label"><span class="fname">两平面间距 b</span><span class="funit">{{ unit }}</span></label>
         <input v-model="bText" type="text" inputmode="decimal" class="field-input sm" placeholder="总间距 / 24" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <!-- T 铜厚 -->
+      <div class="field">
+        <label class="field-label"><span class="fname">铜厚 T</span><span class="funit">{{ unit }}</span></label>
+        <input v-model="tText" type="text" inputmode="decimal" class="field-input sm" placeholder="如 2.2 / 1.25" autocomplete="off" spellcheck="false" />
       </div>
 
       <!-- S 间距（差分） -->
