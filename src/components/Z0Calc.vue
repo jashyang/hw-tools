@@ -179,9 +179,9 @@ async function copyResult() {
 
 .compute-row { display: flex; align-items: center; gap: 10px; }
 .dir-seg { display: flex; gap: 4px; background: rgba(6,9,15,0.45); border: 1px solid var(--border); border-radius: 6px; padding: 2px; }
-.dir-btn { font-family: var(--mono); font-size: 12px; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 5px 12px; cursor: pointer; transition: all 0.15s; }
+.dir-btn { font-family: var(--mono); font-size: 11px; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 5px 12px; cursor: pointer; transition: all 0.15s; }
 .dir-btn.on { color: var(--cyan); border-color: var(--cyan-dim); background: rgba(79,138,168,0.12); }
-.unit-toggle { font-family: var(--mono); font-size: 12px; color: var(--cyan); cursor: pointer; opacity: 0.85; }
+.unit-toggle { font-family: var(--mono); font-size: 11px; color: var(--cyan); cursor: pointer; opacity: 0.85; }
 .compute-row .compute-btn { margin-left: auto; }
 
 .input-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
@@ -189,7 +189,7 @@ async function copyResult() {
 .field-label { display: flex; align-items: baseline; gap: 8px; }
 .fname { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: 1px; }
 .funit { font-family: var(--mono); font-size: 10px; color: var(--cyan); opacity: 0.8; }
-.field-input { font-size: 18px !important; padding: 10px 12px !important; }
+/* 输入框统一用 sm(16px)，与变压器/FlybackCalc 一致；placeholder 随之 16px */
 .field-input.sm { font-size: 16px !important; padding: 8px 10px !important; line-height: 21px; }
 
 .hint { font-size: 11px; color: var(--dim); line-height: 1.6; }
