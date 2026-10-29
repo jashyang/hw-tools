@@ -1,19 +1,20 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { computeBuckInductor } from '../core/buck-inductor.js'
+import { computeBuckInductor, DEFAULT_DERATE } from '../core/buck-inductor.js'
 import { useCopy } from '../composables/useCopy.js'
 
-// ── 输入方式：已知 Vin_max / 只知 Vin（按 110% 估算 Vin_max）──
-const vinMode = ref('max')   // max | vin
+// ── 输入电压口径：默认 Vin（自动按 ×110% 推 Vin_max）；也可直接给 Vin_max ──
+const vinMode = ref('vin')   // vin | max
 
 // ── 输入（默认全空）──
-const vinMaxText = ref('')
 const vinText = ref('')
+const vinMaxText = ref('')
 const voutText = ref('')
 const ioutText = ref('')
-const fswText = ref('')      // kHz
-const kText = ref('40')      // 纹波系数 %（默认 40%，合理 20~40%）
-const lText = ref('')        // 实际感值 µH（选填）
+const fswText = ref('')                 // kHz
+const kText = ref('40')                 // 纹波系数 %（默认 40%，合理 20~40%）
+const derateText = ref(String(DEFAULT_DERATE * 100))  // 感值总降额 %（默认 30%）
+const lText = ref('')                   // 实际感值 µH（选填）
 
 const error = ref('')
 const result = ref(null)
@@ -26,8 +27,8 @@ function num(str) {
 
 function compute() {
   error.value = ''; result.value = null
-  if (vinMode.value === 'max' && num(vinMaxText.value) == null) { error.value = '请填写 Vin_max（或切到「只知 Vin」）'; return }
   if (vinMode.value === 'vin' && num(vinText.value) == null) { error.value = '请填写输入电压 Vin'; return }
+  if (vinMode.value === 'max' && num(vinMaxText.value) == null) { error.value = '请填写最大输入电压 Vin_max'; return }
   const vout = num(voutText.value)
   if (vout == null) { error.value = '请填写输出电压 Vout'; return }
   const iout = num(ioutText.value)
@@ -36,26 +37,29 @@ function compute() {
   if (fswK == null) { error.value = '请填写开关频率 fsw（kHz）'; return }
   const kPct = num(kText.value)
   if (kPct == null) { error.value = '请填写纹波系数 K_IND（%，20~40）'; return }
+  const dr = parseFloat(String(derateText.value).trim())
+  if (!isFinite(dr) || dr < 0 || dr > 50) { error.value = '感值裕量填 0~50（%）'; return }
 
   const res = computeBuckInductor({
-    vinMax: vinMode.value === 'max' ? num(vinMaxText.value) : null,
     vin: vinMode.value === 'vin' ? num(vinText.value) : null,
+    vinMax: vinMode.value === 'max' ? num(vinMaxText.value) : null,
     vout,
     iout,
     fsw: fswK * 1000,
     kInd: kPct / 100,
+    derate: dr / 100,
     lUH: num(lText.value),
   })
   if (res.error) { error.value = res.error; return }
   result.value = res
 }
 
-watch([vinMode, vinMaxText, vinText, voutText, ioutText, fswText, kText, lText], () => {
+watch([vinMode, vinText, vinMaxText, voutText, ioutText, fswText, kText, derateText, lText], () => {
   result.value = null; error.value = ''
 })
 
 function f(x, n = 2) { return isFinite(x) ? Number(x).toFixed(n) : '—' }
-const vinLabel = computed(() => result.value && result.value.vinAssumed ? 'Vin × 110%（估算）' : 'Vin_max')
+const vinLabel = computed(() => (result.value && result.value.vinAssumed ? 'Vin × 110%' : 'Vin_max'))
 
 // ── 复制 ──
 const { copied, copy } = useCopy()
@@ -64,9 +68,9 @@ async function copyResult() {
   if (!r) return
   const lines = [
     'Buck 输出电感计算',
-    `输入：${vinLabel.value} ${f(r.vinMax)}V · Vout ${f(r.vout)}V · Iout ${f(r.iout)}A · fsw ${f(r.fsw / 1000, 0)}kHz · K_IND ${f(r.kInd * 100, 0)}%`,
-    `L_MIN = ${f(r.lminUH)}µH → 选 ${f(r.lselUH)}µH`,
-    `ΔI_L = ${f(r.dIL, 3)}A（纹波率 ${f(r.ripplePct * 100, 1)}%）`,
+    `输入：${vinLabel.value} ${f(r.vinMax)}V · Vout ${f(r.vout)}V · Iout ${f(r.iout)}A · fsw ${f(r.fsw / 1000, 0)}kHz · K_IND ${f(r.kInd * 100, 0)}% · 感值裕量 ${f(r.derate * 100, 0)}%`,
+    `L_MIN = ${f(r.lminUH)}µH → 选档门槛 ${f(r.lneedUH)}µH → 推荐 ${f(r.lselUH)}µH（最坏 ${f(r.lworstUH)}µH）`,
+    `纹波：名义 ΔI ${f(r.dIL, 3)}A / ${f(r.ripplePct * 100, 1)}%，最坏 ΔI ${f(r.dILWorst, 3)}A / ${f(r.rippleWorstPct * 100, 1)}%`,
     `I_pk = ${f(r.ipk)}A · I_rms = ${f(r.irms)}A`,
     `Isat ≥ ${f(r.isatNeed)}A（建议 ${r.isatRec}A 档）· DCR ≤ ${f(r.dcrMaxOhm * 1000, 1)}mΩ`,
   ]
@@ -76,25 +80,24 @@ async function copyResult() {
 
 <template>
   <div class="buck-calc">
-    <!-- 输入电压已知方式 -->
-    <div class="mode-seg">
-      <button class="mode-btn" :class="{ on: vinMode === 'max' }" @click="vinMode = 'max'">已知 Vin_max</button>
-      <button class="mode-btn" :class="{ on: vinMode === 'vin' }" @click="vinMode = 'vin'">只知 Vin（×110%）</button>
-    </div>
-
-    <div class="compute-row">
-      <span class="row-hint">{{ vinMode === 'max' ? '直接用 Vin_max 计算（最坏输入点）' : '按 Vin × 110% 估算 Vin_max（含电网容差）' }}</span>
-      <button class="btn cyan compute-btn" @click="compute">⚡ 计算</button>
+    <!-- 输入电压口径（轻量单选，默认 Vin） -->
+    <div class="radio-row">
+      <label :class="{ on: vinMode === 'vin' }">
+        <input type="radio" value="vin" v-model="vinMode" /> Vin（自动取 ×110%）
+      </label>
+      <label :class="{ on: vinMode === 'max' }">
+        <input type="radio" value="max" v-model="vinMode" /> 直接给 Vin_max
+      </label>
     </div>
 
     <div class="input-grid">
-      <div class="field" v-if="vinMode === 'max'">
-        <label class="field-label"><span class="fname">最大输入电压 Vin_max</span><span class="funit">V</span></label>
-        <input v-model="vinMaxText" type="text" inputmode="decimal" class="field-input sm" placeholder="如 26.4" autocomplete="off" spellcheck="false" />
-      </div>
-      <div class="field" v-else>
+      <div class="field" v-if="vinMode === 'vin'">
         <label class="field-label"><span class="fname">输入电压 Vin</span><span class="funit">V（×1.1）</span></label>
         <input v-model="vinText" type="text" inputmode="decimal" class="field-input sm" placeholder="如 24 → 26.4" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="field" v-else>
+        <label class="field-label"><span class="fname">最大输入电压 Vin_max</span><span class="funit">V</span></label>
+        <input v-model="vinMaxText" type="text" inputmode="decimal" class="field-input sm" placeholder="如 26.4" autocomplete="off" spellcheck="false" />
       </div>
 
       <div class="field">
@@ -118,12 +121,22 @@ async function copyResult() {
       </div>
 
       <div class="field">
+        <label class="field-label"><span class="fname">感值裕量</span><span class="funit">%（默认 30）</span></label>
+        <input v-model="derateText" type="text" inputmode="decimal" class="field-input sm" placeholder="公差 20% + 偏置 10%" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div class="field">
         <label class="field-label"><span class="fname">实际感值 L（选填）</span><span class="funit">µH</span></label>
         <input v-model="lText" type="text" inputmode="decimal" class="field-input sm" placeholder="留空=自动选标准档" autocomplete="off" spellcheck="false" />
       </div>
     </div>
 
-    <div class="hint">按最高输入电压算最坏纹波（ΔI 随 Vin 增大而增大）；K_IND 越小感值越大、纹波越小，但体积与瞬态代价更高。</div>
+    <div class="compute-row">
+      <span class="row-hint">按最高输入电压算最坏纹波；感值裕量 = 标称公差 + 满载软饱和降额</span>
+      <button class="btn cyan compute-btn" @click="compute">⚡ 计算</button>
+    </div>
+
+    <div class="hint">感值裕量 30% ≈ 感值公差 ±20% 与满载偏置降额 ~10% 的乘性叠加（1−0.8×0.9≈28%，圆整 30%）；中间窗口的纹波按最坏感值给出。</div>
 
     <!-- 错误 -->
     <div v-if="error" class="result-error">⚠ {{ error }}</div>
@@ -131,24 +144,25 @@ async function copyResult() {
     <!-- 结果 -->
     <div v-if="result" class="result-panel buck-result">
       <div class="buck-main">
-        <div class="buck-main-value led">{{ f(result.lminUH) }} <small>µH</small></div>
-        <div class="buck-main-label">最小电感 L_MIN（{{ result.vinAssumed ? 'Vin×110%' : 'Vin_max' }} 下纹波 ≤ {{ f(result.kInd * 100, 0) }}% Iout）</div>
+        <div class="buck-main-value led">{{ f(result.lselUH) }} <small>µH</small></div>
+        <div class="buck-main-label">
+          {{ result.manual ? '手填感值（验算）' : '推荐感值' }} · L_MIN {{ f(result.lminUH) }}µH → 门槛 {{ f(result.lneedUH) }}µH（含 {{ f(result.derate * 100, 0) }}% 降额）
+        </div>
       </div>
 
       <div class="buck-sub">
-        <div class="result-row">
-          <span class="result-label">选定感值</span>
-          <span class="result-value">{{ f(result.lselUH) }} µH</span>
-          <span class="result-note inline" v-if="result.manual">手填值{{ result.lselUH >= result.lminUH ? '' : '（小于 L_MIN）' }}</span>
-          <span class="result-note inline" v-else>标准档（≥ L_MIN 的最小档）</span>
-        </div>
-        <div class="result-row"><span class="result-label">ΔI_L</span><span class="result-value">{{ f(result.dIL, 3) }} A</span><span class="result-note inline">纹波率 {{ f(result.ripplePct * 100, 1) }}%</span></div>
-        <div class="result-row"><span class="result-label">峰值电流 I_pk</span><span class="result-value">{{ f(result.ipk) }} A</span><span class="result-note inline">Iout + ΔI/2</span></div>
+        <div class="result-row"><span class="result-label">L_MIN</span><span class="result-value">{{ f(result.lminUH) }} µH</span><span class="result-note inline">K_IND {{ f(result.kInd * 100, 0) }}% 标称口径</span></div>
+        <div class="result-row"><span class="result-label">选档门槛</span><span class="result-value">{{ f(result.lneedUH) }} µH</span><span class="result-note inline">L_MIN ÷ (1 − {{ f(result.derate * 100, 0) }}%)</span></div>
+        <div class="result-row"><span class="result-label">最坏感值</span><span class="result-value">{{ f(result.lworstUH) }} µH</span><span class="result-note inline">标称 × (1 − {{ f(result.derate * 100, 0) }}%)</span></div>
+        <div class="result-row"><span class="result-label">纹波 ΔI_L</span><span class="result-value">{{ f(result.dIL, 3) }} A</span><span class="result-note inline">名义 {{ f(result.ripplePct * 100, 1) }}%</span></div>
+        <div class="result-row"><span class="result-label">最坏纹波</span><span class="result-value">{{ f(result.dILWorst, 3) }} A</span><span class="result-note inline">{{ f(result.rippleWorstPct * 100, 1) }}% Iout</span></div>
+        <div class="result-row"><span class="result-label">峰值电流 I_pk</span><span class="result-value">{{ f(result.ipk) }} A</span><span class="result-note inline">按最坏感值</span></div>
         <div class="result-row"><span class="result-label">RMS 电流 I_rms</span><span class="result-value">{{ f(result.irms) }} A</span></div>
         <div class="result-row"><span class="result-label">饱和电流 Isat</span><span class="result-value">≥ {{ f(result.isatNeed) }} A</span><span class="result-note inline">建议 {{ result.isatRec }}A 档（{{ result.isatMargin }}× 裕量）</span></div>
         <div class="result-row"><span class="result-label">DCR 上限</span><span class="result-value">{{ f(result.dcrMaxOhm * 1000, 1) }} mΩ</span><span class="result-note inline">铜损 ≤ 1% Pout</span></div>
         <div class="result-row"><span class="result-label">占空比 D</span><span class="result-value">{{ f(result.duty * 100, 1) }} %</span><span class="result-note inline">@{{ f(result.vinMax) }}V</span></div>
         <div class="result-row"><span class="result-label">工作点</span><span class="result-value">{{ result.ilow > 0 ? 'CCM' : 'DCM（谷值≤0）' }}</span><span class="result-note inline">谷值 {{ f(result.ilow) }} A</span></div>
+        <div class="result-row"><span class="result-label">不加裕量档</span><span class="result-value">{{ f(result.lselNomUH) }} µH</span><span class="result-note inline">最坏纹波 {{ f(result.rippleNomTierWorstPct * 100, 0) }}%，仅体积受限时参考</span></div>
       </div>
 
       <!-- 告警 -->
@@ -173,9 +187,25 @@ async function copyResult() {
 <style scoped>
 .buck-calc { display: flex; flex-direction: column; gap: 14px; }
 
-.mode-seg { display: flex; gap: 6px; padding: 4px; background: rgba(6,9,15,0.45); border: 1px solid var(--border); border-radius: 8px; }
-.mode-btn { flex: 1; font-family: var(--mono); font-size: 13px; letter-spacing: 1px; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 8px 0; cursor: pointer; transition: all 0.18s; }
-.mode-btn.on { color: var(--neon); border-color: var(--neon-dim); background: rgba(88,166,143,0.1); box-shadow: var(--glow-green); }
+/* 输入电压口径：轻量单选（不用大分段控件） */
+.radio-row { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+.radio-row label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px;
+  color: var(--dim); cursor: pointer; transition: color 0.15s;
+}
+.radio-row label.on { color: var(--neon); }
+.radio-row input[type='radio'] {
+  appearance: none; -webkit-appearance: none;
+  width: 12px; height: 12px; margin: 0;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: rgba(6,9,15,0.6); cursor: pointer; transition: all 0.15s;
+}
+.radio-row input[type='radio']:checked {
+  border-color: var(--neon);
+  background: var(--neon);
+  box-shadow: var(--glow-green);
+}
 
 .compute-row { display: flex; align-items: center; gap: 10px; }
 .row-hint { flex: 1; font-size: 11px; color: var(--dim); }
