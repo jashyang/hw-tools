@@ -4,6 +4,7 @@ import CalcForm from '../components/CalcForm.vue'
 import ResistorCalc from '../components/ResistorCalc.vue'
 import FlybackCalc from '../components/FlybackCalc.vue'
 import Z0Calc from '../components/Z0Calc.vue'
+import BuckInductorCalc from '../components/BuckInductorCalc.vue'
 import FormulaModal from '../components/FormulaModal.vue'
 
 const props = defineProps({
@@ -42,6 +43,7 @@ async function openModal() {
       <ResistorCalc v-if="scene.component === 'resistor'" />
       <FlybackCalc v-else-if="scene.component === 'flyback'" />
       <Z0Calc v-else-if="scene.component === 'impedance'" />
+      <BuckInductorCalc v-else-if="scene.component === 'buck-inductor'" />
       <CalcForm v-else :scene="scene" />
     </div>
     <!-- 通用公式弹窗（非 flyback 场景有 derivation 时显示） -->

@@ -227,8 +227,86 @@ export const impedance = {
   component: 'impedance',
 }
 
+// ── Buck（降压）输出电感选型 ──
+export const buckInductor = {
+  id: 'buck-inductor',
+  name: 'Buck 电感',
+  icon: '🧲',
+  desc: '降压变换器输出电感：最小感值 · 纹波 · 饱和/RMS 电流选型',
+  component: 'buck-inductor',
+  formula: 'L_MIN = Vout·(Vin_max − Vout) / (Vin_max · fsw · Iout · K_IND)',
+  derivation: [
+    {
+      title: '① 伏秒平衡：稳态下电感「充的伏秒 = 放的伏秒」',
+      lines: [
+        `Buck 主管导通时电感承受 Vin − Vout，电流线性上升；关断时电感经续流管承受 −Vout，电流线性下降。`,
+        `稳态下每周期电流必须回到同一起点，否则电流会逐周期累积（发散）：`,
+        `  (Vin − Vout) · D·T = Vout · (1 − D)·T`,
+        `约去周期 T，得到占空比：`,
+        `  D = Vout / Vin`,
+        `物理意义：D 由输入输出电压比唯一决定，与负载、电感量无关——所以 Buck 的占空比在给定输入下是固定的。`,
+      ],
+    },
+    {
+      title: '② 由 V = L·di/dt 得纹波公式（式 9）',
+      lines: [
+        `电感的基本关系是 V = L · di/dt，即 ΔI = V·Δt / L。`,
+        `取关断段：电感电压恒定等于 Vout，持续时间 Δt = (1−D)·T = (1−D)/fsw：`,
+        `  ΔI_L = Vout · (1 − D) / (L · fsw)`,
+        `把 ① 的 D = Vout/Vin 代入，1 − D = (Vin − Vout)/Vin：`,
+        `  ΔI_L = Vout · (Vin − Vout) / (Vin · L · fsw)     ← 式(9)`,
+        `物理意义：纹波正比于 Vout·(1−D)，反比于 L 与 fsw。升压比越大（D 越大），关断时间越长，纹波越大。`,
+      ],
+    },
+    {
+      title: '③ 为什么必须用 Vin_max（式 9 的单调性）',
+      lines: [
+        `把 Vin 单独拿出来看，纹波对输入电压的依赖项是：`,
+        `  ΔI ∝ Vout · (1 − Vout/Vin)`,
+        `Vin 越大，Vout/Vin 越小，括号越大 → 纹波随输入电压单调递增。`,
+        `物理意义：Vin 升高时关断时间 (1−D)·T 变长（占空比变小、电感有更多时间放能），而电感承受的电压 Vout 不变，`,
+        `所以每个周期电流掉得更多。最坏情况永远出现在最高输入电压 → 感值必须按 Vin_max 设计。`,
+        `这也是为什么只知标称 Vin 时要按 Vin×110%（含电网波动/容差）推 Vin_max，否则满载最坏点上纹波会超标。`,
+      ],
+    },
+    {
+      title: '④ 反解最小感值（式 10）',
+      lines: [
+        `用纹波系数 K_IND 把纹波归一化到输出电流：`,
+        `  K_IND = ΔI_L / Iout`,
+        `代入式(9)并解出 L：`,
+        `  L_MIN = Vout · (Vin_max − Vout) / (Vin_max · fsw · Iout · K_IND)     ← 式(10)`,
+        `物理意义：满载、最高输入、最坏容差三件事叠加时，感值不低于 L_MIN 才能保证纹波率不超过设计的 K_IND。`,
+      ],
+    },
+    {
+      title: '⑤ 为什么 K_IND 取 20%~40%（工程权衡）',
+      lines: [
+        `感值大（K 小）：纹波小 → 输出纹波小、峰值电流低、峰值电流模式比较器信噪比好；`,
+        `代价是体积大、DCR 高（铜损大）、瞬态响应慢（电流爬升慢，负载跳变时输出跌落深）。`,
+        `感值小（K 大）：瞬态快、体积小、DCR 低；`,
+        `代价是纹波电流大 → 输出电容上的纹波电压大、电感与开关管 RMS 电流大（传导损耗上升），`,
+        `更危险的是峰值电流逼近甚至超过过流保护阈值 → 满载时可能误触发限流/打嗝。`,
+        `所以 K_IND 控制在 20%~40% 是"纹波可接受 + 峰值电流留有余量"的折中，K_IND 上限不应超过 50%。`,
+      ],
+    },
+    {
+      title: '⑥ 选型三件套：感值、饱和电流、RMS 电流',
+      lines: [
+        `峰值电流：  I_pk = Iout + ΔI_L/2`,
+        `RMS 电流：   I_rms = √(Iout² + ΔI_L²/12)   （直流 + 三角波纹波的有效值，用于估发热）`,
+        `· 饱和电流 Isat：必须大于 I_pk，且要留裕量——短路/过流/启动瞬间电感电流远超稳态值，`,
+        `  并且 Isat 随温度下降（数据手册通常给 20℃ 与 100℃ 两组），应按高温值与限流点判定。`,
+        `· 额定/温升电流：须 ≥ I_rms，否则满载温升超标（磁芯与绕组一起决定，两家厂商口径可能不同）。`,
+        `· DCR：按铜损预算反推上限——P_dcr = I_rms²·DCR ≤ 1%·Pout。`,
+        `· 谷值电流 Iout − ΔI_L/2 ≤ 0 时进入 DCM，实际纹波/环路特性都会偏离 CCM 设计，需重新评估。`,
+      ],
+    },
+  ],
+}
+
 // ── 场景注册表 ──
-export const scenes = [resistor, power, rc, flyback, impedance]
+export const scenes = [resistor, power, rc, flyback, buckInductor, impedance]
 
 // ── 分类结构（大类 → 小类） ──
 export const CATEGORIES = [
@@ -248,7 +326,7 @@ export const CATEGORIES = [
     id: 'flyback',
     name: '开关电源',
     icon: '🔌',
-    items: ['flyback'],
+    items: ['flyback', 'buck-inductor'],
   },
   {
     id: 'impedance',
